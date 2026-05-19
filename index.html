@@ -662,19 +662,19 @@ html, body {
   #shopTimer .num { font-size: 12px; }
 }
 
-/* Pause button (top-right HUD corner) */
+/* Pause button (below topbar, right side) */
 #pauseBtn {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
-  right: 12px;
-  width: 38px; height: 38px;
+  top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+  right: 14px;
+  width: 36px; height: 36px;
   border-radius: 50%;
-  background: rgba(10, 4, 18, 0.7);
-  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(10, 4, 18, 0.75);
+  border: 1px solid rgba(255,255,255,0.18);
   color: white;
-  font-size: 14px; font-weight: 700;
+  font-size: 13px; font-weight: 700;
   cursor: pointer; pointer-events: auto;
-  z-index: 14;
+  z-index: 16;
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.08s, background 0.18s;
@@ -682,7 +682,7 @@ html, body {
 #pauseBtn:active { transform: scale(0.92); }
 #pauseBtn:hover { background: rgba(255,90,40,0.4); }
 @media (orientation: landscape) and (max-height: 540px) {
-  #pauseBtn { width: 34px; height: 34px; font-size: 13px; top: 8px; right: 10px; }
+  #pauseBtn { width: 32px; height: 32px; font-size: 12px; top: calc(max(8px, env(safe-area-inset-top)) + 44px); right: 10px; }
 }
 
 #pauseModal {

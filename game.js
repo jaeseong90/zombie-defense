@@ -812,6 +812,10 @@ function spawnZombie(type) {
   else if (side === 2) { x = (Math.random() - 0.5) * margin * 2; z = -margin + Math.random() * 0.5; }
   else                 { x = (Math.random() - 0.5) * margin * 2; z =  margin - Math.random() * 0.5; }
   const meshInfo = createZombieMesh(type);
+  // Set position BEFORE adding to scene so it doesn't flash at origin for one frame
+  meshInfo.g.position.set(x, 0, z);
+  const aim = Math.atan2(-x, z); // face roughly toward center
+  meshInfo.g.rotation.y = aim;
   scene.add(meshInfo.g);
   G.zombies.push({
     id: Math.random().toString(36).slice(2, 8),
@@ -1307,18 +1311,33 @@ function updateZombies(dt) {
     z.z = Math.max(-ARENA + 0.5, Math.min(ARENA - 0.5, z.z));
     collideProps(z, 0.45 * spec.sz);
 
-    // Update mesh: position, walk, swing, lunge, squash
+    // Update mesh: heavy shamble walk
     const g = z.mesh.g;
-    let by = Math.sin(z.walkPhase) * 0.04 * spec.sz;
-    const lOff = z.lungeT * 0.45;
-    g.position.set(z.x + Math.sin(z.a) * lOff, by, z.z + (-Math.cos(z.a)) * lOff);
+    // Step-bob: each leg plant lifts the body (uses |sin| so always upward)
+    const stepBob = Math.abs(Math.sin(z.walkPhase * 0.5)) * 0.12 * spec.sz;
+    const lOff = z.lungeT * 0.5;
+    g.position.set(z.x + Math.sin(z.a) * lOff, stepBob, z.z + (-Math.cos(z.a)) * lOff);
     g.rotation.y = z.a;
-    const ls = Math.sin(z.walkPhase) * 0.3;
+    // Side-to-side hip roll while walking
+    g.rotation.z = Math.sin(z.walkPhase) * 0.10 * spec.sz;
+    g.rotation.x = 0.06 + Math.sin(z.walkPhase * 0.5) * 0.04;  // permanent forward hunch + sway
+    // Big leg stride (no foot is mid-air during plant moment)
+    const ls = Math.sin(z.walkPhase) * 0.55;
     z.mesh.legL.rotation.x = ls;
     z.mesh.legR.rotation.x = -ls;
-    const asw = Math.sin(z.walkPhase * 0.5) * 0.15;
+    // Heavy shoulder lurch — arms swing opposite + drop/raise with body
+    const asw = Math.sin(z.walkPhase * 0.5) * 0.28;
     z.mesh.armL.rotation.z = 0.22 + asw;
     z.mesh.armR.rotation.z = -0.22 - asw;
+    // Subtle arm lift back-and-forth
+    const armBack = Math.sin(z.walkPhase + Math.PI/2) * 0.18;
+    z.mesh.armL.rotation.x = -1.0 + armBack;
+    z.mesh.armR.rotation.x = -1.0 - armBack;
+    // Head nod (lurches forward each step)
+    if (z.mesh.head) {
+      z.mesh.head.rotation.x = 0.3 + Math.sin(z.walkPhase * 0.5 + Math.PI) * 0.18;
+      z.mesh.head.rotation.z = Math.sin(z.walkPhase) * 0.08;
+    }
     if (z.hitT > 0) {
       const hk = z.hitT / 0.14;
       g.scale.set(1 + hk * 0.22, 1 - hk * 0.14, 1 + hk * 0.06);
@@ -1450,28 +1469,30 @@ function syncPlayerMeshes(dt) {
     pm.g.visible = p.alive;
     const speed = Math.hypot(p.vx, p.vz);
     const moving = speed > 0.5;
-    const bobF = moving ? 10 : 2.4;
-    const bobA = moving ? 0.07 : 0.025;
-    pm.g.position.set(p.x, Math.abs(Math.sin(G.t * bobF + p.idx * 0.7)) * bobA, p.z);
+    // Step-bob synced to leg phase (each step lifts the body) — feels like real walking
+    const bob = moving
+      ? Math.abs(Math.sin(p.walkPhase * 0.5)) * 0.13
+      : Math.abs(Math.sin(G.t * 2.4 + p.idx * 0.7)) * 0.03;
+    pm.g.position.set(p.x, bob, p.z);
     pm.g.rotation.y = p.a;
     // Body lean in direction of motion (world-aligned, looks natural in ortho)
-    const leanK = 0.14;
+    const leanK = 0.16;
     pm.g.rotation.x = (p.vz / PLAYER_SPEED) * leanK;
-    pm.g.rotation.z = -(p.vx / PLAYER_SPEED) * leanK;
+    pm.g.rotation.z = -(p.vx / PLAYER_SPEED) * leanK + (moving ? Math.sin(p.walkPhase) * 0.06 : 0);
     const leanAmt = Math.min(1, speed / PLAYER_SPEED) * leanK;
-    // Bigger walk swing when moving fast
-    const swing = Math.sin(p.walkPhase) * (moving ? 0.5 : 0.08);
+    // Big stride leg swing — clearly visible stepping
+    const swing = Math.sin(p.walkPhase) * (moving ? 0.75 : 0.08);
     pm.legL.rotation.x = swing;
     pm.legR.rotation.x = -swing;
-    // Arm sway in time with legs (counter-phase)
+    // Arm sway counter-phase + lift on opposite leg
     if (pm.armL) {
-      const aSwing = Math.sin(p.walkPhase + Math.PI) * (moving ? 0.18 : 0.04);
+      const aSwing = Math.sin(p.walkPhase + Math.PI) * (moving ? 0.28 : 0.04);
       pm.armL.rotation.x = -0.7 + aSwing;
       pm.armR.rotation.x = -0.7 - aSwing;
     }
-    // Head bob — slight independent counter-tilt to stabilize gaze
+    // Head counter-tilt + slight nod
     if (pm.head) {
-      pm.head.rotation.x = -leanAmt * 0.6;
+      pm.head.rotation.x = -leanAmt * 0.6 + (moving ? Math.sin(p.walkPhase * 0.5) * 0.04 : 0);
     }
     // Hit squash
     if (p.hitT > 0) {
