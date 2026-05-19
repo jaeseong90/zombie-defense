@@ -1920,6 +1920,10 @@ function updateHUD(dt) {
     hp1Fill.style.width = (p1.hp / p1.maxHp * 100) + '%';
     hp1Fill.style.background = p1.hp > 60 ? 'var(--hp-good)' : p1.hp > 30 ? 'var(--hp-warn)' : 'var(--hp-low)';
     hp1Card.classList.toggle('hpDead', !p1.alive);
+    if (p1._lastHp != null && p1.hp < p1._lastHp - 0.5) {
+      hp1Card.classList.remove('hit'); void hp1Card.offsetWidth; hp1Card.classList.add('hit');
+    }
+    p1._lastHp = p1.hp;
   }
   if (p2) {
     hp2Card.classList.remove('hidden');
@@ -1927,6 +1931,10 @@ function updateHUD(dt) {
     hp2Fill.style.width = (p2.hp / p2.maxHp * 100) + '%';
     hp2Fill.style.background = p2.hp > 60 ? 'var(--hp-good)' : p2.hp > 30 ? 'var(--hp-warn)' : 'var(--hp-low)';
     hp2Card.classList.toggle('hpDead', !p2.alive);
+    if (p2._lastHp != null && p2.hp < p2._lastHp - 0.5) {
+      hp2Card.classList.remove('hit'); void hp2Card.offsetWidth; hp2Card.classList.add('hit');
+    }
+    p2._lastHp = p2.hp;
   }
 
   // Powerup badges + super
@@ -1948,16 +1956,19 @@ function updateHUD(dt) {
       superDirty = false;
     }
 
-    // Combo
+    // Combo with tier escalation
     if (me.combo >= 2) {
       const t = `x${me.combo}  COMBO`;
+      const tier = me.combo >= 7 ? 'tier3' : me.combo >= 5 ? 'tier2' : me.combo >= 3 ? 'tier1' : '';
       if (comboEl.textContent !== t) {
         comboEl.textContent = t;
-        comboEl.classList.add('show');
+        comboEl.className = 'show ' + tier;
         comboEl.classList.remove('peak'); void comboEl.offsetWidth; comboEl.classList.add('peak');
+      } else if (!comboEl.classList.contains(tier) && tier) {
+        comboEl.className = 'show ' + tier + ' peak';
       }
     } else {
-      comboEl.classList.remove('show');
+      comboEl.className = '';
     }
 
     // Inventory slots
