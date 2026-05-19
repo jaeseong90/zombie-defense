@@ -709,8 +709,7 @@ function nearestPlayer(x, z) {
   return { p: best, d: Math.sqrt(bd) };
 }
 
-function updatePlayers(dt) {
-  // Local input
+function gatherLocalInput() {
   const me = G.players[G.myIdx];
   if (!me) return;
   let mvX = 0, mvY = 0;
@@ -728,7 +727,22 @@ function updatePlayers(dt) {
   const av = joyVec(joys.aim);
   if (av.len > 0.18) { aimX = av.x; aimY = av.y; }
   me.input = { mvX, mvY, aimX, aimY, aimLen: av.len };
+}
 
+function updatePlayers(dt) {
+  // On host with peer: apply peer input to player[1]
+  if (G.isCoop && isHost && G.players[1]) {
+    G.players[1].input = { mvX: peerInput.mvX, mvY: peerInput.mvY, aimX: peerInput.aimX, aimY: peerInput.aimY, aimLen: peerInput.aimLen };
+    if (peerInput.useSuper) {
+      const p2 = G.players[1];
+      if (p2.alive && p2.super >= SUPER_FULL) { p2.super = 0; triggerSuper(p2); pendingEvents.push({ t: 'super', x: p2.x, z: p2.z, who: 1 }); }
+      peerInput.useSuper = false;
+    }
+    if (peerInput.useSlot >= 0) {
+      useItemForPlayer(G.players[1], peerInput.useSlot);
+      peerInput.useSlot = -1;
+    }
+  }
   for (const p of G.players) {
     if (!p.alive) continue;
     const inp = p.input || { mvX: 0, mvY: 0, aimX: 0, aimY: 0, aimLen: 0 };
@@ -832,6 +846,8 @@ function updateBullets(dt) {
       G.bullets.splice(i, 1);
       continue;
     }
+    // Visual-only bullets (peer-side from broadcast events) don't collide
+    if (b.visualOnly) continue;
     // Check zombies
     let hit = false;
     for (const z of G.zombies) {
@@ -858,12 +874,13 @@ function updateBullets(dt) {
 
 function killZombie(z, ownerIdx) {
   const p = G.players[ownerIdx];
+  let earned = 0;
   if (p) {
     p.combo = Math.min(8, p.combo + 1);
     p.comboT = 3.2;
     p.kills++;
     const base = ZTYPE[z.type].score;
-    const earned = Math.floor(base * comboMultiplier(p.combo));
+    earned = Math.floor(base * comboMultiplier(p.combo));
     p.score += earned;
     G.score += earned;
     G.kills++;
@@ -871,6 +888,8 @@ function killZombie(z, ownerIdx) {
     superDirty = true;
     spawnDmgNumber(z.x, 2.0, z.z, `+${earned}` + (p.combo > 1 ? ` x${p.combo}` : ''), 'score');
   }
+  pendingEvents.push({ t: 'kill', x: z.x, z: z.z, s: earned, cb: p ? p.combo : 1 });
+  ensureAudio(); audio.kill?.();
   // Drop pickup chance
   if (Math.random() < PICKUP_DROP * (z.type === 'brute' ? 4 : 1)) {
     const types = ['hp', 'dmg', 'rapid', 'shotgun', 'shield'];
@@ -918,6 +937,8 @@ function bombExplode(bomb) {
   // Visual
   spawnExplosion(bomb.x, 0.5, bomb.z, spec.expR);
   shake(0.7);
+  pendingEvents.push({ t: 'pop', x: bomb.x, z: bomb.z, r: spec.expR });
+  ensureAudio(); audio.boom?.();
 }
 
 function damagePlayer(p, dmg, isCrit = false) {
@@ -943,7 +964,7 @@ function spawnPickup(x, z, type) {
   const m = createPickupMesh(type);
   m.g.position.set(x, 0, z);
   scene.add(m.g);
-  G.pickups.push({ x, z, type, t: 0, mesh: m });
+  G.pickups.push({ id: 'pk-' + (pickupIdCounter++), x, z, type, t: 0, mesh: m });
 }
 
 function collectPickup(p, pk) {
@@ -963,8 +984,7 @@ function collectPickup(p, pk) {
   }
 }
 
-function useItem(slot) {
-  const p = G.players[G.myIdx];
+function useItemForPlayer(p, slot) {
   if (!p) return;
   const t = p.inv[slot];
   if (!t) return;
@@ -976,6 +996,9 @@ function useItem(slot) {
   }
   p.inv[slot] = null;
   if (slot === 0) p.inv0Dirty = true; else p.inv1Dirty = true;
+}
+function useItem(slot) {
+  useItemForPlayer(G.players[G.myIdx], slot);
 }
 
 let superDirty = true;
@@ -1011,6 +1034,8 @@ function triggerSuper(p) {
   }
   spawnExplosion(p.x, 0.6, p.z, R);
   shake(1.2);
+  pendingEvents.push({ t: 'super', x: p.x, z: p.z });
+  ensureAudio(); audio.super?.();
 }
 
 // ─── ZOMBIE AI ──────────────────────────────────────────────
@@ -1334,6 +1359,8 @@ function startWave(idx) {
   showWaveIntro(w, G.wave);
   if (G.wave === WAVES.length) waveBoxEl.classList.add('boss');
   else waveBoxEl.classList.toggle('boss', !!w.boss);
+  pendingEvents.push({ t: 'wave', n: G.wave });
+  ensureAudio(); audio.wave?.();
 }
 
 function updateWave(dt) {
@@ -1350,6 +1377,8 @@ function updateWave(dt) {
   if (G.toSpawnList.length === 0 && aliveZ === 0 && G.waveT > 1.5) {
     if (G.wave >= WAVES.length) {
       G.phase = 'win';
+      pendingEvents.push({ t: 'win' });
+      ensureAudio(); audio.win?.();
       showBanner('🏆 VICTORY', '10 웨이브 클리어', '메인 메뉴');
     } else {
       // Brief rest then next wave
@@ -1450,6 +1479,8 @@ function updateHUD(dt) {
     const allDead = G.players.every(p => !p.alive);
     if (allDead) {
       G.phase = 'lose';
+      pendingEvents.push({ t: 'lose' });
+      ensureAudio(); audio.lose?.();
       showBanner('💀 ELIMINATED', `웨이브 ${G.wave}에서 전멸`, '다시 시작');
     }
   }
@@ -1473,25 +1504,31 @@ function showBanner(title, sub, btnLabel) {
   $('bannerBtn').addEventListener('click', () => location.reload());
 }
 
-function startGame(coop = false) {
+function startGame(coop = false, isPeerJoin = false) {
   G.isCoop = coop;
   G.phase = 'play';
   G.t = 0;
-  G.wave = 0;
-  G.score = 0;
-  G.kills = 0;
-  G.players = [makePlayer(0)];
-  if (coop) G.players.push(makePlayer(1));
-  G.myIdx = 0;
+  if (!isPeerJoin) {
+    G.wave = 0;
+    G.score = 0;
+    G.kills = 0;
+  }
   G.zombies.forEach(z => scene.remove(z.mesh.g));
   G.bullets.forEach(b => scene.remove(b.mesh.g));
   G.pickups.forEach(p => scene.remove(p.mesh.g));
   G.particles.forEach(p => scene.remove(p.mesh));
+  for (const p of G.players) if (p?.mesh?.g) scene.remove(p.mesh.g);
   G.zombies = []; G.bullets = []; G.pickups = []; G.particles = [];
+  G.players = [makePlayer(0)];
+  if (coop) G.players.push(makePlayer(1));
+  G.myIdx = isPeerJoin ? 1 : 0;
   menu.classList.add('hidden');
   hudEl.classList.remove('hidden');
   enterImmersive();
-  startWave(0);
+  ensureAudio();
+  if (!isPeerJoin) startWave(0);
+  // First HUD draw
+  hp2Card.classList.toggle('hidden', !coop);
 }
 
 async function enterImmersive() {
@@ -1505,46 +1542,468 @@ async function enterImmersive() {
   } catch {}
 }
 
-// Menu buttons
+// ============================================================
+// NETWORK (P2P via PeerJS) — host runs simulation, peer sends input
+// ============================================================
+let peer = null, conn = null, isHost = false, connected = false;
+let netLastSend = 0;
+const NET_HZ_NUM = 25;
+const peerInput = { mvX: 0, mvY: 0, aimX: 0, aimY: 0, aimLen: 0, useSlot: -1, useSuper: false };
+const pendingEvents = []; // visual events to broadcast (shots, kills, etc.)
+let pickupIdCounter = 1;
+
+function randomCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+
+function setupConn(c) {
+  conn = c;
+  conn.on('data', handleNetMsg);
+  conn.on('close', () => onDisconnect());
+  conn.on('error', () => onDisconnect());
+  connected = true;
+}
+function onDisconnect() {
+  connected = false;
+  if (G.phase === 'play' || G.phase === 'rest') {
+    showBanner('🔌 연결 끊김', '상대방과의 연결이 해제되었습니다', '메인 메뉴');
+  }
+}
+function netSend(m) { if (conn && connected) try { conn.send(m); } catch {} }
+
+function handleNetMsg(m) {
+  if (!m || !m.t) return;
+  if (m.t === 'state' && !isHost) applyNetState(m);
+  else if (m.t === 'input' && isHost) Object.assign(peerInput, m);
+  else if (m.t === 'event') applyEvent(m.e);
+}
+
+function applyNetState(m) {
+  G.phase = m.ph;
+  G.wave = m.wv;
+  G.score = m.sc;
+  G.kills = m.kl;
+  G.toSpawnList.length = m.ts || 0; // for HUD remain counter
+  // Players
+  for (let i = 0; i < 2; i++) {
+    const sp = m.ps?.[i]; const p = G.players[i];
+    if (!sp || !p) continue;
+    p.x = sp.x; p.z = sp.z; p.a = sp.a;
+    p.vx = sp.vx || 0; p.vz = sp.vz || 0;
+    if (sp.wp != null) p.walkPhase = sp.wp;
+    if (p.hp > sp.hp && i === G.myIdx) {
+      // We took damage
+      dmgFlashEl.classList.add('flash');
+      setTimeout(() => dmgFlashEl.classList.remove('flash'), 60);
+      shake(0.4);
+      ensureAudio(); audio.dmg?.();
+    }
+    p.hp = sp.hp; p.alive = sp.al;
+    p.super = sp.su; superDirty = true;
+    p.dmgT = sp.dm; p.rapidT = sp.rp; p.shieldT = sp.sh; p.shotgunT = sp.sg;
+    p.combo = sp.cb;
+    const newInv0 = sp.i0 || null, newInv1 = sp.i1 || null;
+    if (p.inv[0] !== newInv0) { p.inv[0] = newInv0; p.inv0Dirty = true; }
+    if (p.inv[1] !== newInv1) { p.inv[1] = newInv1; p.inv1Dirty = true; }
+    if (sp.hit && i !== G.myIdx) {} // optional remote hit feedback
+  }
+  // Zombies
+  const ids = new Set();
+  for (const sz of (m.zs || [])) {
+    ids.add(sz.id);
+    let z = G.zombies.find(o => o.id === sz.id);
+    if (!z) {
+      const mi = createZombieMesh(sz.t);
+      scene.add(mi.g);
+      z = { id: sz.id, type: sz.t, x: sz.x, z: sz.z, a: sz.a, hp: sz.hp, hpMax: ZTYPE[sz.t].hp, alive: true, deathT: 0, walkPhase: Math.random()*10, attackCD: 0, lungeT: 0, hitT: 0, mesh: mi };
+      G.zombies.push(z);
+    } else {
+      if (z.hp > sz.hp) z.hitT = 0.14;
+      z.x = sz.x; z.z = sz.z; z.a = sz.a; z.hp = sz.hp;
+      z.alive = sz.hp > 0;
+    }
+  }
+  for (let i = G.zombies.length - 1; i >= 0; i--) {
+    const z = G.zombies[i];
+    if (!ids.has(z.id) && z.alive) {
+      z.alive = false; z.deathT = 0.001;
+    }
+  }
+  // Pickups
+  const pkIds = new Set();
+  for (const spk of (m.pks || [])) {
+    pkIds.add(spk.id);
+    let pk = G.pickups.find(p => p.id === spk.id);
+    if (!pk) {
+      const mi = createPickupMesh(spk.t);
+      mi.g.position.set(spk.x, 0, spk.z);
+      scene.add(mi.g);
+      G.pickups.push({ id: spk.id, x: spk.x, z: spk.z, type: spk.t, t: 0, mesh: mi });
+    }
+  }
+  for (let i = G.pickups.length - 1; i >= 0; i--) {
+    if (!pkIds.has(G.pickups[i].id)) {
+      scene.remove(G.pickups[i].mesh.g);
+      G.pickups.splice(i, 1);
+    }
+  }
+  // Events (visual VFX broadcast)
+  for (const e of (m.evs || [])) applyEvent(e);
+}
+
+function applyEvent(e) {
+  if (!e) return;
+  if (e.t === 'shot') {
+    // Spawn visual-only bullet on peer
+    const m = createBulletMesh(e.c || 0xffe27a);
+    m.g.position.set(e.x, 1.0, e.z);
+    scene.add(m.g);
+    G.bullets.push({
+      x: e.x, y: 1.0, z: e.z,
+      vx: e.dx * BULLET_SPEED, vy: 0, vz: e.dz * BULLET_SPEED,
+      life: BULLET_LIFE,
+      dmg: 0, ownerIdx: e.o, crit: false,
+      mesh: m, visualOnly: true,
+    });
+    if (e.o >= 0 && G.players[e.o]) G.players[e.o].mesh.muzzleFlashT = 0.08;
+    audio?.shot?.();
+  } else if (e.t === 'hit') {
+    spawnHitParticles(e.x, e.y, e.z, e.c || 0xff4422, e.n || 5);
+    spawnDmgNumber(e.x, e.y + 0.4, e.z, e.d, e.cr ? 'crit' : '');
+    audio?.hit?.();
+  } else if (e.t === 'kill') {
+    spawnHitParticles(e.x, 1.0, e.z, 0xa01010, 14);
+    spawnDmgNumber(e.x, 1.8, e.z, `+${e.s}` + (e.cb > 1 ? ` x${e.cb}` : ''), 'score');
+    audio?.kill?.();
+  } else if (e.t === 'pop') {
+    spawnExplosion(e.x, 0.5, e.z, e.r);
+    shake(0.7);
+    audio?.boom?.();
+  } else if (e.t === 'super') {
+    spawnExplosion(e.x, 0.6, e.z, 6.5);
+    shake(1.2);
+    audio?.super?.();
+  } else if (e.t === 'pickup') {
+    spawnHitParticles(e.x, 0.8, e.z, e.c, 18);
+    audio?.pickup?.();
+  } else if (e.t === 'wave') {
+    if (e.n != null) showWaveIntro(WAVES[e.n - 1] || { desc: '' }, e.n);
+    audio?.wave?.();
+  } else if (e.t === 'win') {
+    audio?.win?.();
+    showBanner('🏆 VICTORY', '10 웨이브 클리어', '메인 메뉴');
+  } else if (e.t === 'lose') {
+    audio?.lose?.();
+    showBanner('💀 ELIMINATED', `웨이브 ${G.wave}에서 전멸`, '다시 시작');
+  }
+}
+
+function netSendState() {
+  if (!isHost || !connected) return;
+  const psd = G.players.map(p => ({
+    x: p.x, z: p.z, a: p.a, hp: p.hp, al: p.alive, su: p.super,
+    vx: p.vx, vz: p.vz, wp: p.walkPhase,
+    dm: p.dmgT, rp: p.rapidT, sh: p.shieldT, sg: p.shotgunT,
+    cb: p.combo, i0: p.inv[0], i1: p.inv[1],
+  }));
+  const zsd = G.zombies.filter(z => z.alive).map(z => ({
+    id: z.id, t: z.type, x: z.x, z: z.z, a: z.a, hp: z.hp,
+  }));
+  const pksd = G.pickups.map(p => ({ id: p.id, t: p.type, x: p.x, z: p.z }));
+  const evs = pendingEvents.splice(0);
+  netSend({ t: 'state', ph: G.phase, wv: G.wave, sc: G.score, kl: G.kills, ts: G.toSpawnList.length, ps: psd, zs: zsd, pks: pksd, evs });
+}
+
+function netSendInput() {
+  if (isHost || !connected) return;
+  const me = G.players[G.myIdx];
+  if (!me) return;
+  const inp = me.input || {};
+  const msg = {
+    t: 'input',
+    mvX: inp.mvX || 0, mvY: inp.mvY || 0,
+    aimX: inp.aimX || 0, aimY: inp.aimY || 0, aimLen: inp.aimLen || 0,
+    useSlot: me.pendingUseSlot ?? -1,
+    useSuper: me.pendingUseSuper ?? false,
+  };
+  netSend(msg);
+  me.pendingUseSlot = -1;
+  me.pendingUseSuper = false;
+}
+
+// Override input gathering to support peer input on host side
+const _origUpdatePlayers = updatePlayers;
+// (no override — we patch inside updatePlayers via G.isCoop check)
+
+// Apply peer input on host: in updatePlayers, when looping, use peerInput for idx=1 if peer
+// We adjust updatePlayers to read from inputs[i] map.
+
+// ─── Menu actions ─────────────────────────────────────────────
+function startHost() {
+  menuMain.classList.add('hidden');
+  menuHost.classList.remove('hidden');
+  hostStatus.innerHTML = '<span class="spinner"></span> 서버에 연결 중…';
+  let attempts = 0;
+  function tryOpen() {
+    const code = randomCode();
+    peer = new Peer('dc-' + code, { debug: 1 });
+    peer.on('open', () => {
+      roomCodeEl.textContent = code;
+      hostStatus.textContent = '코드 공유 후 P2 접속 대기 중…';
+    });
+    peer.on('connection', (c) => {
+      isHost = true;
+      setupConn(c);
+      c.on('open', () => {
+        hostStatus.textContent = '연결됨! 출격 준비…';
+        setTimeout(() => startGame(true), 600);
+      });
+    });
+    peer.on('error', (err) => {
+      if (err.type === 'unavailable-id' && attempts < 4) { attempts++; peer.destroy(); tryOpen(); }
+      else hostStatus.textContent = '오류: ' + (err.type || err.message);
+    });
+  }
+  tryOpen();
+}
+function startJoin() {
+  menuMain.classList.add('hidden');
+  menuJoin.classList.remove('hidden');
+  joinInput.value = '';
+  joinStatus.textContent = '';
+  setTimeout(() => joinInput.focus(), 100);
+}
+function doJoin() {
+  const code = (joinInput.value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { joinStatus.textContent = '6자리 코드를 정확히 입력하세요'; return; }
+  joinStatus.innerHTML = '<span class="spinner"></span> 연결 중…';
+  peer = new Peer(undefined, { debug: 1 });
+  peer.on('open', () => {
+    const c = peer.connect('dc-' + code, { reliable: false, serialization: 'json' });
+    c.on('open', () => {
+      isHost = false;
+      setupConn(c);
+      joinStatus.textContent = '연결됨!';
+      setTimeout(() => startGame(true, true), 400);
+    });
+    c.on('error', () => { joinStatus.textContent = '연결 실패'; });
+  });
+  peer.on('error', (err) => { joinStatus.textContent = '오류: ' + (err.type || err.message); });
+}
+
 $('btnSolo').addEventListener('click', () => startGame(false));
-$('btnHost').addEventListener('click', () => {
-  // TODO: multiplayer in Stage 2 — for now alias to solo
-  startGame(false);
-});
-$('btnJoin').addEventListener('click', () => {
-  // TODO: multiplayer in Stage 2
-  startGame(false);
-});
+$('btnHost').addEventListener('click', () => startHost());
+$('btnJoin').addEventListener('click', () => startJoin());
 $('btnHostBack')?.addEventListener('click', () => {
   menuMain.classList.remove('hidden');
   menuHost.classList.add('hidden');
+  if (peer) { peer.destroy(); peer = null; }
 });
 $('btnJoinBack')?.addEventListener('click', () => {
   menuMain.classList.remove('hidden');
   menuJoin.classList.add('hidden');
+  if (peer) { peer.destroy(); peer = null; }
 });
+joinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
+joinInput.addEventListener('input', (e) => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+});
+$('btnJoinConfirm').addEventListener('click', doJoin);
+
+// ============================================================
+// AUDIO (procedural Web Audio synth)
+// ============================================================
+const audio = {};
+let actx = null;
+function ensureAudio() {
+  if (actx) return;
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch { return; }
+  audio.shot = () => playShot();
+  audio.hit = () => playHit();
+  audio.kill = () => playKill();
+  audio.boom = () => playBoom();
+  audio.super = () => playSuper();
+  audio.pickup = () => playPickup();
+  audio.wave = () => playWave();
+  audio.win = () => playWin();
+  audio.lose = () => playLose();
+  audio.dmg = () => playDmg();
+}
+function tone(freq, dur, type = 'sine', vol = 0.18, when = 0) {
+  if (!actx) return;
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  g.gain.setValueAtTime(vol, actx.currentTime + when);
+  g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + when + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(actx.currentTime + when); o.stop(actx.currentTime + when + dur + 0.05);
+}
+function sweep(fromF, toF, dur, type = 'sawtooth', vol = 0.15) {
+  if (!actx) return;
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(fromF, actx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(toF, actx.currentTime + dur);
+  g.gain.value = vol;
+  g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(); o.stop(actx.currentTime + dur + 0.05);
+}
+function noise(dur, vol = 0.18, filterFreq = 1200) {
+  if (!actx) return;
+  const bufferSize = Math.floor(actx.sampleRate * dur);
+  const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = actx.createBufferSource();
+  src.buffer = buffer;
+  const f = actx.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = filterFreq;
+  const g = actx.createGain();
+  g.gain.value = vol;
+  g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+  src.connect(f); f.connect(g); g.connect(actx.destination);
+  src.start();
+}
+function playShot() {
+  sweep(280, 80, 0.07, 'square', 0.10);
+  noise(0.05, 0.12, 2400);
+}
+function playHit() {
+  sweep(140, 60, 0.06, 'triangle', 0.13);
+  noise(0.04, 0.08, 600);
+}
+function playKill() {
+  sweep(220, 60, 0.18, 'square', 0.12);
+  noise(0.1, 0.07, 800);
+}
+function playBoom() {
+  sweep(200, 30, 0.45, 'sawtooth', 0.22);
+  noise(0.4, 0.18, 600);
+}
+function playSuper() {
+  sweep(180, 1200, 0.55, 'sawtooth', 0.18);
+  sweep(80, 400, 0.8, 'triangle', 0.14);
+  noise(0.5, 0.14, 1800);
+}
+function playPickup() {
+  tone(440, 0.08, 'triangle', 0.16);
+  tone(660, 0.08, 'triangle', 0.16, 0.05);
+  tone(880, 0.12, 'triangle', 0.14, 0.1);
+}
+function playWave() {
+  tone(220, 0.18, 'square', 0.14);
+  tone(330, 0.22, 'square', 0.14, 0.12);
+}
+function playWin() {
+  const notes = [392, 523, 659, 784, 988];
+  notes.forEach((f, i) => tone(f, 0.22, 'triangle', 0.14, i * 0.12));
+}
+function playLose() {
+  sweep(220, 60, 1.4, 'sawtooth', 0.18);
+  noise(1.0, 0.10, 400);
+}
+function playDmg() {
+  sweep(180, 80, 0.25, 'square', 0.16);
+}
+
+// Wire local sound effects (single-player and host-side)
+const _origFire = firePlayerWeapon;
+function firePlayerWeapon_wrapped(p) {
+  _origFire(p);
+  ensureAudio();
+  audio.shot?.();
+  // Broadcast shot event
+  const dx = Math.sin(p.a), dz = -Math.cos(p.a);
+  const ox = p.x + dx * 0.6, oz = p.z + dz * 0.6;
+  if (p.shotgunT > 0) {
+    for (let i = -2; i <= 2; i++) {
+      const a2 = p.a + i * 0.13;
+      pendingEvents.push({ t: 'shot', x: ox, z: oz, dx: Math.sin(a2), dz: -Math.cos(a2), o: p.idx, c: 0xff7028 });
+    }
+  } else {
+    pendingEvents.push({ t: 'shot', x: ox, z: oz, dx, dz, o: p.idx });
+  }
+}
+// Replace
+firePlayerWeapon = firePlayerWeapon_wrapped;
+
+// Audio for damage taken
+const _origDamage = damagePlayer;
+function damagePlayer_wrapped(p, dmg, isCrit) {
+  _origDamage(p, dmg, isCrit);
+  if (p.idx === G.myIdx) audio.dmg?.();
+}
+damagePlayer = damagePlayer_wrapped;
+
+// Audio for super activation (route to host on peer side)
+const _origUseSuper = useSuper;
+useSuper = function () {
+  const p = G.players[G.myIdx];
+  if (!p || !p.alive || p.super < SUPER_FULL) return;
+  if (G.isCoop && !isHost) {
+    p.pendingUseSuper = true;
+    ensureAudio(); audio.super?.();  // optimistic feedback
+  } else {
+    _origUseSuper();
+  }
+};
+
+// Item use (route to host on peer side)
+const _origUseItem = useItem;
+useItem = function (slot) {
+  const me = G.players[G.myIdx];
+  if (!me || !me.inv[slot]) return;
+  if (G.isCoop && !isHost) {
+    me.pendingUseSlot = slot;
+    ensureAudio(); audio.pickup?.();  // optimistic feedback
+  } else {
+    _origUseItem(slot);
+    ensureAudio(); audio.pickup?.();
+  }
+};
 
 // ============================================================
 // MAIN LOOP
 // ============================================================
+const amAuthoritative = () => !G.isCoop || isHost;
+
 let prevT = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - prevT) / 1000);
   prevT = now;
   if (G.phase === 'play' || G.phase === 'rest') {
     G.t += dt;
-    updatePlayers(dt);
-    updateZombies(dt);
-    updateBullets(dt);
-    updateBulletsVsPlayers();
-    updateParticles(dt);
-    updateWave(dt);
+    gatherLocalInput();
+    if (amAuthoritative()) {
+      updatePlayers(dt);
+      updateZombies(dt);
+      updateBullets(dt);
+      updateBulletsVsPlayers();
+      updateParticles(dt);
+      updateWave(dt);
+    } else {
+      // Peer: visual-only bullet movement + particles
+      updateBullets(dt);
+      updateParticles(dt);
+    }
+    // Network
+    if (G.isCoop && connected && (now - netLastSend) > 1000 / NET_HZ_NUM) {
+      if (isHost) netSendState(); else netSendInput();
+      netLastSend = now;
+    }
     syncPlayerMeshes(dt);
     syncPickupMeshes(dt);
     updateCamera(dt);
     updateHUD(dt);
-  } else {
-    // menu rendering — could render a hero scene
   }
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
