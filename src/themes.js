@@ -367,6 +367,132 @@ function makePopcornCart(x, z, tmat, outlined) {
   return { g, x, z, w: 0.65, d: 0.4, type: 'popcorn' };
 }
 
+// ─── Internal arena structures (per-theme layout pieces) ────
+// These are full-tall walls/columns/centerpieces that radically change the playground geometry.
+
+function makeSubwayDivider(x, z, w, d, tmat, outlined) {
+  // Long tile-clad subway platform wall
+  const g = new THREE.Group();
+  const wall = outlined(new THREE.Mesh(new THREE.BoxGeometry(w, 1.8, d), tmat(0x4a4254)), 1.03);
+  wall.position.y = 0.9; g.add(wall);
+  // Tile grid markings via stripes
+  const stripeMat = tmat(0x1a1820);
+  for (let yy = 0.3; yy < 1.7; yy += 0.45) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, 0.04, d + 0.02), stripeMat);
+    s.position.y = yy; g.add(s);
+  }
+  // Yellow safety strip at base
+  const safetyStripe = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, 0.06, d + 0.02), tmat(0xd4a72c, { emissive: 0xd4a72c, emissiveIntensity: 0.5 }));
+  safetyStripe.position.y = 0.05; g.add(safetyStripe);
+  g.position.set(x, 0, z);
+  return { g, x, z, w: w / 2, d: d / 2, type: 'wall' };
+}
+function makeSubwayPillar(x, z, tmat, outlined) {
+  const g = new THREE.Group();
+  const col = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.9, 3.4, 0.9), tmat(0x52465c)), 1.03);
+  col.position.y = 1.7; g.add(col);
+  // Two metal bands
+  for (const yy of [0.6, 2.7]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.08, 0.95), tmat(0x2a262e));
+    band.position.y = yy; g.add(band);
+  }
+  // Glowing platform sign
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.7),
+    new THREE.MeshBasicMaterial({ color: 0xffd540 }));
+  sign.position.set(0, 2.4, 0); g.add(sign);
+  g.position.set(x, 0, z);
+  return { g, x, z, w: 0.5, d: 0.5, type: 'pillar' };
+}
+
+function makeHospitalWall(x, z, w, d, tmat, outlined) {
+  // Clinical wall with red cross signage
+  const g = new THREE.Group();
+  const wall = outlined(new THREE.Mesh(new THREE.BoxGeometry(w, 1.7, d), tmat(0xe2dcce)), 1.03);
+  wall.position.y = 0.85; g.add(wall);
+  // Green safety line at top
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, 0.06, d + 0.02), tmat(0x3a8a4a, { emissive: 0x3a8a4a, emissiveIntensity: 0.4 }));
+  trim.position.y = 1.66; g.add(trim);
+  // Red cross emblems on longer side
+  if (w > 4) {
+    for (let dx = -w/2 + 1.5; dx <= w/2 - 1.5; dx += 3.5) {
+      const cross1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.14), new THREE.MeshBasicMaterial({ color: 0xff3a3a }));
+      cross1.position.set(dx, 1.0, d / 2 + 0.01); g.add(cross1);
+      const cross2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.5), new THREE.MeshBasicMaterial({ color: 0xff3a3a }));
+      cross2.position.set(dx, 1.0, d / 2 + 0.01); g.add(cross2);
+    }
+  }
+  // Blood drip
+  const drip = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.2), new THREE.MeshBasicMaterial({ color: 0x6a0a0a, transparent: true, opacity: 0.55 }));
+  drip.position.set(Math.random() * w * 0.4 - w * 0.2, 0.95, d / 2 + 0.011);
+  g.add(drip);
+  g.position.set(x, 0, z);
+  return { g, x, z, w: w / 2, d: d / 2, type: 'wall' };
+}
+
+function makeCarnivalCarousel(x, z, tmat, outlined) {
+  // Central rotating carousel-style structure
+  const g = new THREE.Group();
+  // Base disc
+  const base = outlined(new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 0.4, 24), tmat(0x6a1828)), 1.02);
+  base.position.y = 0.2; g.add(base);
+  // Striped center post
+  const post = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 3.6, 16), tmat(0xeeeae4)), 1.03);
+  post.position.y = 2.0; g.add(post);
+  for (let i = 0; i < 6; i++) {
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.5, 16), tmat(0xc02838));
+    s.position.y = 0.4 + i * 0.6; g.add(s);
+  }
+  // Striped canopy roof
+  const canopy = outlined(new THREE.Mesh(new THREE.ConeGeometry(2.8, 1.2, 12, 1, false), tmat(0xc02838)), 1.03);
+  canopy.position.y = 4.3; g.add(canopy);
+  // Canopy white stripes
+  for (let i = 0; i < 6; i++) {
+    const stripe = new THREE.Mesh(new THREE.ConeGeometry(2.84, 1.24, 3, 1, true, (i / 6) * Math.PI * 2 + 0.5, Math.PI / 6), tmat(0xeeeae4));
+    stripe.position.y = 4.3; g.add(stripe);
+  }
+  // Top sphere with star
+  const topBall = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), tmat(0xffd540, { emissive: 0xffd540, emissiveIntensity: 0.5 }));
+  topBall.position.y = 5.1; g.add(topBall);
+  // Carousel horses (4 simple chibi shapes around the post)
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * Math.PI * 2;
+    const horse = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.9), tmat(0xeeeae4));
+    body.position.y = 1.3; horse.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.4), tmat(0xeeeae4));
+    head.position.set(0, 1.65, -0.55); horse.add(head);
+    const mane = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.3), tmat(0xc02838));
+    mane.position.set(0, 1.78, -0.45); horse.add(mane);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.05, 0.92), tmat(0xc02838));
+    stripe.position.y = 1.4; horse.add(stripe);
+    horse.position.set(Math.sin(a) * 1.6, 0, Math.cos(a) * 1.6);
+    horse.rotation.y = a;
+    g.add(horse);
+  }
+  g.position.set(x, 0, z);
+  return { g, x, z, w: 2.6, d: 2.6, type: 'carousel' };
+}
+
+function makeCarnivalTent(x, z, color, tmat, outlined) {
+  const g = new THREE.Group();
+  // Striped tent
+  const tent = outlined(new THREE.Mesh(new THREE.ConeGeometry(2.0, 2.6, 12, 1), tmat(color)), 1.03);
+  tent.position.y = 1.3; g.add(tent);
+  // White stripes (visual only)
+  for (let i = 0; i < 6; i++) {
+    const stripe = new THREE.Mesh(new THREE.ConeGeometry(2.04, 2.65, 3, 1, true, (i / 6) * Math.PI * 2 + 0.5, Math.PI / 6), tmat(0xeeeae4));
+    stripe.position.y = 1.3; g.add(stripe);
+  }
+  // Top pennant
+  const pennant = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), new THREE.MeshBasicMaterial({ color: 0xffe266, side: THREE.DoubleSide }));
+  pennant.position.set(0.25, 2.7, 0); pennant.rotation.y = Math.PI/4; g.add(pennant);
+  // Entrance arch (dark)
+  const arch = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.05), tmat(0x111118));
+  arch.position.set(0, 0.45, 1.5); g.add(arch);
+  g.position.set(x, 0, z);
+  return { g, x, z, w: 1.4, d: 1.4, type: 'tent' };
+}
+
 function makeCarnivalLamp(x, z, tmat, outlined) {
   const g = new THREE.Group();
   const pole = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.8, 8), tmat(0x2a1010)), 1.04);
@@ -402,15 +528,25 @@ export const THEMES = {
     ambient: 0x2a2030,
     ringColor: 0xd4a72c,
     propBuilder: (tmat, outlined) => [
-      makeVendingMachine(-12, -6, tmat, outlined),
-      makeVendingMachine(12, -6, tmat, outlined),
-      makeSubwayBench(-10, 8, tmat, outlined, 0),
-      makeSubwayBench(10, 8, tmat, outlined, 0),
-      makeSubwayTicket(-6, -12, tmat, outlined, 0),
-      makeSubwayTicket(6, -12, tmat, outlined, 0),
-      makeSubwayBench(0, 10, tmat, outlined, 0),
-      makeSubwayBench(-4, -2, tmat, outlined, Math.PI/2),
-      makeSubwayBench(4, -2, tmat, outlined, -Math.PI/2),
+      // Two long subway-style dividing walls create three "tracks" (north/center/south lanes)
+      makeSubwayDivider(-10, -7.5, 12, 0.8, tmat, outlined),
+      makeSubwayDivider( 10, -7.5, 12, 0.8, tmat, outlined),
+      makeSubwayDivider(-10,  7.5, 12, 0.8, tmat, outlined),
+      makeSubwayDivider( 10,  7.5, 12, 0.8, tmat, outlined),
+      // Platform pillars (along center lane, but leaving spawn area at origin open)
+      makeSubwayPillar(-14, 0, tmat, outlined),
+      makeSubwayPillar( 14, 0, tmat, outlined),
+      makeSubwayPillar(-10, 0, tmat, outlined),
+      makeSubwayPillar( 10, 0, tmat, outlined),
+      // Decor
+      makeVendingMachine(-12, -12, tmat, outlined),
+      makeVendingMachine( 12, -12, tmat, outlined),
+      makeSubwayBench(-12,  12, tmat, outlined, 0),
+      makeSubwayBench( 12,  12, tmat, outlined, 0),
+      makeSubwayTicket(-3, -13, tmat, outlined, 0),
+      makeSubwayTicket( 3, -13, tmat, outlined, 0),
+      makeSubwayTicket(-3,  13, tmat, outlined, 0),
+      makeSubwayTicket( 3,  13, tmat, outlined, 0),
     ],
   },
 
@@ -429,16 +565,29 @@ export const THEMES = {
     ambient: 0x303a2c,
     ringColor: 0x6affa0,
     propBuilder: (tmat, outlined) => [
-      makeGurney(-10, -6, tmat, outlined, 0),
-      makeGurney(10, -6, tmat, outlined, Math.PI),
-      makeGurney(-10, 6, tmat, outlined, 0),
-      makeGurney(10, 6, tmat, outlined, Math.PI),
-      makeIVStand(-7, 0, tmat, outlined),
-      makeIVStand(7, 0, tmat, outlined),
-      makeIVStand(0, -10, tmat, outlined),
-      makeIVStand(0, 10, tmat, outlined),
-      makeMedCart(-4, 4, tmat, outlined),
-      makeMedCart(4, -4, tmat, outlined),
+      // Cross-shape internal walls dividing arena into 4 wards with central passage
+      makeHospitalWall( 0, -10, 0.8, 8,  tmat, outlined),   // vertical, top
+      makeHospitalWall( 0,  10, 0.8, 8,  tmat, outlined),   // vertical, bottom
+      makeHospitalWall(-10, 0, 8,   0.8, tmat, outlined),   // horizontal, left
+      makeHospitalWall( 10, 0, 8,   0.8, tmat, outlined),   // horizontal, right
+      // Beds in each ward
+      makeGurney(-10, -8, tmat, outlined, 0),
+      makeGurney( 10, -8, tmat, outlined, Math.PI),
+      makeGurney(-10,  8, tmat, outlined, 0),
+      makeGurney( 10,  8, tmat, outlined, Math.PI),
+      makeGurney(-6, -3, tmat, outlined, Math.PI/2),
+      makeGurney( 6,  3, tmat, outlined, -Math.PI/2),
+      // IV stands and carts scattered
+      makeIVStand(-7, -7, tmat, outlined),
+      makeIVStand( 7, -7, tmat, outlined),
+      makeIVStand(-7,  7, tmat, outlined),
+      makeIVStand( 7,  7, tmat, outlined),
+      makeIVStand(-12,  3, tmat, outlined),
+      makeIVStand( 12, -3, tmat, outlined),
+      makeMedCart(-5, 12, tmat, outlined),
+      makeMedCart( 5, -12, tmat, outlined),
+      makeMedCart(-12, -3, tmat, outlined),
+      makeMedCart( 12,  3, tmat, outlined),
     ],
   },
 
@@ -457,16 +606,24 @@ export const THEMES = {
     ambient: 0x4a1828,
     ringColor: 0xffd540,
     propBuilder: (tmat, outlined) => [
-      makePopcornCart(-10, -8, tmat, outlined),
-      makePopcornCart(10, 8, tmat, outlined),
-      makeBalloonPole(-10, 8, tmat, outlined),
-      makeBalloonPole(10, -8, tmat, outlined),
-      makeBalloonPole(0, -12, tmat, outlined),
-      makeBalloonPole(0, 12, tmat, outlined),
-      makeCarnivalLamp(-13, 0, tmat, outlined),
-      makeCarnivalLamp(13, 0, tmat, outlined),
-      makeCarnivalLamp(-5, 4, tmat, outlined),
-      makeCarnivalLamp(5, -4, tmat, outlined),
+      // Central showpiece: striped carousel — must navigate around it
+      makeCarnivalCarousel(0, 0, tmat, outlined),
+      // Four corner tents (different colors)
+      makeCarnivalTent(-11, -11, 0xc02838, tmat, outlined),
+      makeCarnivalTent( 11, -11, 0x42a5f5, tmat, outlined),
+      makeCarnivalTent(-11,  11, 0x66bb6a, tmat, outlined),
+      makeCarnivalTent( 11,  11, 0xab47bc, tmat, outlined),
+      // Stalls + decor around perimeter
+      makePopcornCart(-8, -13, tmat, outlined),
+      makePopcornCart( 8,  13, tmat, outlined),
+      makeBalloonPole(-13, -3, tmat, outlined),
+      makeBalloonPole( 13,  3, tmat, outlined),
+      makeBalloonPole(-3, -13, tmat, outlined),
+      makeBalloonPole( 3,  13, tmat, outlined),
+      makeCarnivalLamp(-7,  5, tmat, outlined),
+      makeCarnivalLamp( 7, -5, tmat, outlined),
+      makeCarnivalLamp(-13, 13, tmat, outlined),
+      makeCarnivalLamp( 13, -13, tmat, outlined),
     ],
   },
 };

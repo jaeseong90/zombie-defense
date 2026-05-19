@@ -3,7 +3,7 @@
 
 export const ARENA = 32;
 export const PLAYER_R = 0.55;
-export const PLAYER_SPEED = 7.2;
+export const PLAYER_SPEED = 8.6;
 export const PLAYER_HP_MAX = 100;
 export const PLAYER_REGEN_DELAY = 3.5;
 export const PLAYER_REGEN_RATE = 7;

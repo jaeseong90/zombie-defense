@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's16-themes';
+const BUILD = 's17-layouts';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -339,9 +339,47 @@ function createPlayerMesh(idx) {
   // Visor (signature glowing strip)
   const visor = new THREE.Mesh(
     new THREE.SphereGeometry(0.37, 18, 8, 0, Math.PI*2, Math.PI/2 - 0.18, 0.28),
-    new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0.95 }),
+    new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0.82 }),
   );
   visor.position.set(0, 1.5, 0); upper.add(visor);
+  // Glowing eye dots inside visor — twin pupils peek through
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (const dx of [-0.10, 0.10]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), eyeMat);
+    eye.position.set(dx, 1.5, -0.345);
+    upper.add(eye);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8),
+      new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.position.set(dx, 1.5, -0.34);
+    upper.add(halo);
+  }
+  // Subtle mouth/grill line under visor for character personality
+  const mouth = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.018, 0.012),
+    new THREE.MeshBasicMaterial({ color: 0x1a1c24 }),
+  );
+  mouth.position.set(0, 1.36, -0.34);
+  upper.add(mouth);
+  for (const dx of [-0.06, 0, 0.06]) {
+    const tooth = new THREE.Mesh(
+      new THREE.BoxGeometry(0.012, 0.04, 0.006),
+      new THREE.MeshBasicMaterial({ color: 0x4a4a56 }),
+    );
+    tooth.position.set(dx, 1.36, -0.345);
+    upper.add(tooth);
+  }
+  // Helmet antenna for silhouette
+  const ant = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.012, 0.32, 6),
+    tmat(0x2a2a30),
+  );
+  ant.position.set(0.22, 2.04, 0); ant.rotation.z = -0.18;
+  upper.add(ant);
+  const antTip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xff4244 }),
+  );
+  antTip.position.set(0.25, 2.2, 0); upper.add(antTip);
   // Team disc on helmet top
   const team = new THREE.Mesh(new THREE.CircleGeometry(0.14, 18),
     new THREE.MeshBasicMaterial({ color: accentGlow }));
@@ -615,7 +653,7 @@ function makePlayer(idx) {
   return {
     idx,
     mesh,
-    x: idx === 0 ? -3 : 3, z: 0, a: 0,
+    x: idx === 0 ? -5 : 5, z: 0, a: 0,
     vx: 0, vz: 0,
     hp: PLAYER_HP_MAX, maxHp: PLAYER_HP_MAX,
     alive: true,

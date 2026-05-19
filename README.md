@@ -1,6 +1,12 @@
 # 🧟 Dead Corridor — 2P Co-op Defense (PWA)
 
-모바일 가로 모드 트윈스틱 슈터. 두 명이 등 맞대고 좀비 10웨이브를 막아내세요. 약 10분 분량.
+🎮 **라이브**: https://zombie-defense-rouge.vercel.app
+📦 **GitHub**: https://github.com/jaeseong90/zombie-defense
+
+모바일 가로 모드 트윈스틱 슈터. 두 명이 등 맞대고 좀비 3웨이브를 막아내세요.
+
+**3개 스테이지** — 지하철 (Subway) → 폐병동 (Hospital) → 카니발 최종전 (Carnival)
+각 웨이브마다 아레나 구조와 분위기가 완전히 바뀝니다.
 
 ## 플레이 방법
 
