@@ -568,7 +568,8 @@ function makePlayer(idx) {
     mesh,
     x: idx === 0 ? -3 : 3, z: 0, a: 0,
     vx: 0, vz: 0,
-    hp: PLAYER_HP_MAX, alive: true,
+    hp: PLAYER_HP_MAX, maxHp: PLAYER_HP_MAX,
+    alive: true,
     lastHitT: 0, hitT: 0,
     fireT: 0,
     walkPhase: Math.random() * 10,
@@ -578,7 +579,11 @@ function makePlayer(idx) {
     super: 0,
     inv: [null, null],
     inv0Dirty: true, inv1Dirty: true,
-    aim: 0, // aim direction angle
+    aim: 0,
+    // Stats (modified by shop upgrades)
+    dmgMult: 1, fireMult: 1, speedMult: 1, regenMult: 1, superGainMult: 1,
+    comboBonus: 0, startShield: 0,
+    upgrades: [],
   };
 }
 
@@ -746,8 +751,8 @@ function updatePlayers(dt) {
   for (const p of G.players) {
     if (!p.alive) continue;
     const inp = p.input || { mvX: 0, mvY: 0, aimX: 0, aimY: 0, aimLen: 0 };
-    p.vx = inp.mvX * PLAYER_SPEED;
-    p.vz = inp.mvY * PLAYER_SPEED;
+    p.vx = inp.mvX * PLAYER_SPEED * p.speedMult;
+    p.vz = inp.mvY * PLAYER_SPEED * p.speedMult;
     p.x = Math.max(-ARENA + 1, Math.min(ARENA - 1, p.x + p.vx * dt));
     p.z = Math.max(-ARENA + 1, Math.min(ARENA - 1, p.z + p.vz * dt));
     p.walkPhase += dt * Math.hypot(inp.mvX, inp.mvY) * 9;
@@ -774,13 +779,13 @@ function updatePlayers(dt) {
     // Regen
     p.fireT = Math.max(0, p.fireT - dt);
     p.hitT = Math.max(0, p.hitT - dt);
-    if (G.t - p.lastHitT > PLAYER_REGEN_DELAY && p.hp < PLAYER_HP_MAX) {
-      p.hp = Math.min(PLAYER_HP_MAX, p.hp + PLAYER_REGEN_RATE * dt);
+    if (G.t - p.lastHitT > PLAYER_REGEN_DELAY && p.hp < p.maxHp) {
+      p.hp = Math.min(p.maxHp, p.hp + PLAYER_REGEN_RATE * p.regenMult * dt);
     }
 
     // Fire bullets while aim joystick is engaged
     if (inp.aimLen > 0.55 && p.fireT <= 0) {
-      const fireInt = BASE_FIRE_INT * (p.rapidT > 0 ? 0.45 : 1.0) * (p.shotgunT > 0 ? 1.6 : 1.0);
+      const fireInt = BASE_FIRE_INT * p.fireMult * (p.rapidT > 0 ? 0.45 : 1.0) * (p.shotgunT > 0 ? 1.6 : 1.0);
       p.fireT = fireInt;
       firePlayerWeapon(p);
     }
@@ -805,19 +810,19 @@ function updatePlayers(dt) {
 function firePlayerWeapon(p) {
   const dx = Math.sin(p.a), dz = -Math.cos(p.a);
   const ox = p.x + dx * 0.6, oz = p.z + dz * 0.6;
-  const dmgMult = (p.dmgT > 0 ? 2 : 1);
+  const buffMult = (p.dmgT > 0 ? 2 : 1) * p.dmgMult;
   if (p.shotgunT > 0) {
     // 5-pellet spread
     for (let i = -2; i <= 2; i++) {
       const angle = p.a + i * 0.13;
       const sx = Math.sin(angle), sz = -Math.cos(angle);
-      spawnBullet(ox, oz, sx, sz, BASE_DMG * 0.72 * dmgMult, p.idx, p.dmgT > 0, 0xff7028);
+      spawnBullet(ox, oz, sx, sz, BASE_DMG * 0.72 * buffMult, p.idx, p.dmgT > 0, 0xff7028);
     }
   } else {
-    spawnBullet(ox, oz, dx, dz, BASE_DMG * dmgMult, p.idx, p.dmgT > 0);
+    spawnBullet(ox, oz, dx, dz, BASE_DMG * buffMult, p.idx, p.dmgT > 0);
   }
   p.mesh.muzzleFlashT = 0.08;
-  p.super = Math.min(SUPER_FULL, p.super + 0.6);
+  p.super = Math.min(SUPER_FULL, p.super + 0.6 * p.superGainMult);
   superDirty = true;
 }
 
@@ -880,11 +885,11 @@ function killZombie(z, ownerIdx) {
     p.comboT = 3.2;
     p.kills++;
     const base = ZTYPE[z.type].score;
-    earned = Math.floor(base * comboMultiplier(p.combo));
+    earned = Math.floor(base * comboMultiplier(p.combo, p.comboBonus));
     p.score += earned;
     G.score += earned;
     G.kills++;
-    p.super = Math.min(SUPER_FULL, p.super + (z.type === 'brute' ? 28 : z.type === 'bomber' ? 6 : 14));
+    p.super = Math.min(SUPER_FULL, p.super + (z.type === 'brute' ? 28 : z.type === 'bomber' ? 6 : 14) * p.superGainMult);
     superDirty = true;
     spawnDmgNumber(z.x, 2.0, z.z, `+${earned}` + (p.combo > 1 ? ` x${p.combo}` : ''), 'score');
   }
@@ -902,11 +907,13 @@ function killZombie(z, ownerIdx) {
   }
   spawnHitParticles(z.x, 1.0, z.z, 0xa01010, 12);
 }
-function comboMultiplier(c) {
-  if (c <= 1) return 1;
-  if (c <= 3) return 1.5;
-  if (c <= 5) return 2;
-  return 2.5;
+function comboMultiplier(c, bonus = 0) {
+  let m;
+  if (c <= 1) m = 1;
+  else if (c <= 3) m = 1.5;
+  else if (c <= 5) m = 2;
+  else m = 2.5;
+  return m + bonus;
 }
 
 function bombExplode(bomb) {
@@ -970,7 +977,7 @@ function spawnPickup(x, z, type) {
 function collectPickup(p, pk) {
   const spec = PICKUP[pk.type];
   if (spec.instant) {
-    p.hp = Math.min(PLAYER_HP_MAX, p.hp + spec.hpRestore);
+    p.hp = Math.min(p.maxHp, p.hp + spec.hpRestore);
     spawnDmgNumber(p.x, 2.0, p.z, '+HP', 'score');
   } else {
     // Try to fit in inventory
@@ -990,7 +997,7 @@ function useItemForPlayer(p, slot) {
   if (!t) return;
   const spec = PICKUP[t];
   if (spec.instant) {
-    p.hp = Math.min(PLAYER_HP_MAX, p.hp + spec.hpRestore);
+    p.hp = Math.min(p.maxHp, p.hp + spec.hpRestore);
   } else {
     p[spec.key] = Math.max(p[spec.key] || 0, spec.dur);
   }
@@ -1341,6 +1348,79 @@ function spawnDmgNumber(wx, wy, wz, value, cls = '') {
 // ============================================================
 // WAVE MANAGEMENT
 // ============================================================
+// ============================================================
+// SHOP (upgrade cards between waves)
+// ============================================================
+const UPGRADES = [
+  { id: 'maxhp',  icon: '❤', name: '+ MAX HP',        desc: '+25 최대 HP, 지금 +25 회복',     apply: (p) => { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); } },
+  { id: 'dmg',    icon: '⚔', name: 'WEAPON UP',       desc: '+25% 데미지 (영구)',                  apply: (p) => { p.dmgMult *= 1.25; } },
+  { id: 'fire',   icon: '🔫', name: 'TRIGGER FINGER',  desc: '+15% 사격 속도 (영구)',           apply: (p) => { p.fireMult *= 0.85; } },
+  { id: 'heal',   icon: '➕', name: 'FIELD MEDIC',     desc: '풀피, 재생력 +40%',                   apply: (p) => { p.hp = p.maxHp; p.regenMult *= 1.4; } },
+  { id: 'super',  icon: '⚡', name: 'PRIMED',          desc: '슈퍼 충전 +30%',                          apply: (p) => { p.superGainMult *= 1.3; } },
+  { id: 'combo',  icon: '🎯', name: 'COMBO BOOST',     desc: '콤보 배율 +0.5',                          apply: (p) => { p.comboBonus += 0.5; } },
+  { id: 'speed',  icon: '👢', name: 'SWIFT BOOTS',     desc: '+12% 이동 속도',                          apply: (p) => { p.speedMult *= 1.12; } },
+  { id: 'shield', icon: '🛡', name: 'WAVE SHIELD',     desc: '매 웨이브 시작 3초 삟드', apply: (p) => { p.startShield = (p.startShield || 0) + 3; } },
+];
+let shopTimerHandle = null;
+function showShop() {
+  const old = document.getElementById('shop');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'shop';
+  el.innerHTML = `
+    <div id="shopHeader">
+      <div id="shopTitle">업그레이드</div>
+      <div id="shopSub">웨이브 ${G.wave + 1} 준비 — 하나 선택</div>
+    </div>
+    <div id="shopCards"></div>
+    <div id="shopFooter">
+      <button id="shopSkip">SKIP</button>
+      <div id="shopTimer"><span class="num" id="shopTimerN">8</span> s</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  // Pick 3 random unique upgrades
+  const pool = UPGRADES.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const cardsEl = document.getElementById('shopCards');
+  for (const u of pool.slice(0, 3)) {
+    const c = document.createElement('div');
+    c.className = 'shopCard';
+    c.innerHTML = `
+      <div class="shopCardIcon">${u.icon}</div>
+      <div class="shopCardName">${u.name}</div>
+      <div class="shopCardDesc">${u.desc}</div>
+    `;
+    c.addEventListener('click', () => buyUpgrade(u.id));
+    cardsEl.appendChild(c);
+  }
+  document.getElementById('shopSkip').addEventListener('click', () => closeShop());
+  let t = 8;
+  shopTimerHandle = setInterval(() => {
+    t--;
+    const n = document.getElementById('shopTimerN');
+    if (n) n.textContent = t;
+    if (t <= 0) closeShop();
+  }, 1000);
+}
+function buyUpgrade(id) {
+  const u = UPGRADES.find(x => x.id === id);
+  if (!u) return;
+  for (const p of G.players) { u.apply(p); p.upgrades.push(id); }
+  ensureAudio(); audio.pickup?.();
+  closeShop();
+}
+function closeShop() {
+  if (shopTimerHandle) { clearInterval(shopTimerHandle); shopTimerHandle = null; }
+  const el = document.getElementById('shop');
+  if (el) el.remove();
+  G.phase = 'play';
+  startWave(G.wave);
+}
+
 function startWave(idx) {
   G.wave = idx + 1;
   G.toSpawnList = [];
@@ -1356,6 +1436,10 @@ function startWave(idx) {
   G.spawnAccum = 0;
   G.waveT = 0;
   G.introShownFor = G.wave;
+  // Apply per-wave start shield from upgrades
+  for (const p of G.players) {
+    if (p.startShield) p.shieldT = Math.max(p.shieldT || 0, p.startShield);
+  }
   showWaveIntro(w, G.wave);
   if (G.wave === WAVES.length) waveBoxEl.classList.add('boss');
   else waveBoxEl.classList.toggle('boss', !!w.boss);
@@ -1380,10 +1464,14 @@ function updateWave(dt) {
       pendingEvents.push({ t: 'win' });
       ensureAudio(); audio.win?.();
       showBanner('🏆 VICTORY', '10 웨이브 클리어', '메인 메뉴');
-    } else {
-      // Brief rest then next wave
+    } else if (G.isCoop) {
+      // Coop: just rest (shop is solo-only for now)
       G.phase = 'rest';
       setTimeout(() => { if (G.phase === 'rest') { G.phase = 'play'; startWave(G.wave); } }, REST_TIME * 1000);
+    } else {
+      // Solo: pick an upgrade
+      G.phase = 'shop';
+      showShop();
     }
   }
 }
@@ -1415,14 +1503,14 @@ function updateHUD(dt) {
   const p1 = G.players[0], p2 = G.players[1];
   if (p1) {
     hp1Val.textContent = Math.round(p1.hp);
-    hp1Fill.style.width = (p1.hp / PLAYER_HP_MAX * 100) + '%';
+    hp1Fill.style.width = (p1.hp / p1.maxHp * 100) + '%';
     hp1Fill.style.background = p1.hp > 60 ? 'var(--hp-good)' : p1.hp > 30 ? 'var(--hp-warn)' : 'var(--hp-low)';
     hp1Card.classList.toggle('hpDead', !p1.alive);
   }
   if (p2) {
     hp2Card.classList.remove('hidden');
     hp2Val.textContent = Math.round(p2.hp);
-    hp2Fill.style.width = (p2.hp / PLAYER_HP_MAX * 100) + '%';
+    hp2Fill.style.width = (p2.hp / p2.maxHp * 100) + '%';
     hp2Fill.style.background = p2.hp > 60 ? 'var(--hp-good)' : p2.hp > 30 ? 'var(--hp-warn)' : 'var(--hp-low)';
     hp2Card.classList.toggle('hpDead', !p2.alive);
   }
@@ -1995,10 +2083,12 @@ function loop(now) {
       updateBullets(dt);
       updateParticles(dt);
     }
-    // Network
+    // Network (or clear stale events in solo)
     if (G.isCoop && connected && (now - netLastSend) > 1000 / NET_HZ_NUM) {
       if (isHost) netSendState(); else netSendInput();
       netLastSend = now;
+    } else if (!G.isCoop) {
+      pendingEvents.length = 0;
     }
     syncPlayerMeshes(dt);
     syncPickupMeshes(dt);

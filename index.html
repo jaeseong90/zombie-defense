@@ -544,6 +544,109 @@ html, body {
 }
 #bannerBtn:active { transform: scale(0.96); }
 
+/* ════════════════════════════════════════════════════════
+   SHOP MODAL (between waves)
+   ════════════════════════════════════════════════════════ */
+#shop {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 22px; padding: 24px;
+  background: rgba(5, 2, 12, 0.78);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  animation: shopFadeIn 0.32s ease-out;
+}
+@keyframes shopFadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+#shopHeader { text-align: center; display: flex; flex-direction: column; gap: 4px; }
+#shopTitle {
+  font-size: 38px; font-weight: 900; letter-spacing: 0.16em;
+  background: linear-gradient(180deg, #fff0c4 0%, #ff8b3a 50%, #b8281f 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 14px rgba(180,40,30,0.5));
+}
+#shopSub { font-size: 11px; letter-spacing: 0.34em; color: var(--text-dim); font-weight: 700; }
+#shopCards { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; max-width: 92vw; }
+.shopCard {
+  width: 200px; min-height: 230px;
+  background: linear-gradient(180deg, rgba(40, 18, 60, 0.85), rgba(15, 6, 24, 0.95));
+  border: 2px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 22px 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  position: relative; overflow: hidden;
+}
+.shopCard::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,90,40,0.08) 100%);
+  pointer-events: none;
+}
+.shopCard:hover {
+  transform: translateY(-6px);
+  border-color: var(--accent-gold);
+  box-shadow: 0 12px 32px rgba(255,183,77,0.35), inset 0 0 30px rgba(255,183,77,0.08);
+}
+.shopCard:active { transform: translateY(-2px) scale(0.98); }
+.shopCardIcon {
+  font-size: 48px; margin: 6px 0;
+  filter: drop-shadow(0 0 12px rgba(255,200,80,0.6));
+}
+.shopCardName {
+  font-size: 14px; font-weight: 900;
+  color: var(--accent-gold);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+}
+.shopCardDesc {
+  font-size: 11px; color: var(--text-dim);
+  line-height: 1.5; text-align: center;
+  font-weight: 600; letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+.shopCardBadge {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 9px; font-weight: 800;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--accent-hot); color: white;
+  letter-spacing: 0.1em;
+}
+#shopFooter {
+  display: flex; gap: 14px; align-items: center;
+  margin-top: 6px;
+}
+#shopSkip {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 10px 24px; border-radius: 10px;
+  font-weight: 700; font-size: 12px; letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+#shopSkip:hover { color: white; border-color: rgba(255,255,255,0.3); }
+#shopTimer {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.2em;
+  color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+}
+#shopTimer .num { color: var(--accent-gold); font-size: 14px; }
+
+@media (orientation: landscape) and (max-height: 540px) {
+  #shop { gap: 14px; padding: 12px; }
+  #shopTitle { font-size: 26px; letter-spacing: 0.12em; }
+  #shopSub { font-size: 9px; letter-spacing: 0.26em; }
+  #shopCards { gap: 10px; }
+  .shopCard { width: 154px; min-height: 175px; padding: 14px 12px; gap: 6px; }
+  .shopCardIcon { font-size: 34px; margin: 0; }
+  .shopCardName { font-size: 11px; }
+  .shopCardDesc { font-size: 10px; line-height: 1.4; }
+  #shopSkip { padding: 8px 18px; font-size: 11px; }
+  #shopTimer { font-size: 10px; }
+  #shopTimer .num { font-size: 12px; }
+}
+
 /* Damage flash + low HP vignette */
 #dmgFlash {
   position: absolute; inset: 0; z-index: 19;
