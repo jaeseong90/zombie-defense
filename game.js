@@ -1542,6 +1542,64 @@ function syncPickupMeshes(dt) {
     pk.mesh.halo.position.y = pk.mesh.crystal.position.y;
     pk.mesh.halo.scale.setScalar(1 + Math.sin(pk.t * 4) * 0.18);
     pk.mesh.ring.scale.setScalar(1 + Math.sin(pk.t * 2.5 + 1) * 0.18);
+    // Magnet toward nearest alive player within range (host/solo only — peer follows via state sync)
+    if (amAuthoritative()) {
+      let bd = Infinity, bp = null;
+      for (const p of G.players) {
+        if (!p.alive) continue;
+        const dx = p.x - pk.x, dz = p.z - pk.z;
+        const d2 = dx*dx + dz*dz;
+        if (d2 < bd) { bd = d2; bp = p; }
+      }
+      if (bp && bd < 4.5 * 4.5) {
+        const d = Math.max(0.1, Math.sqrt(bd));
+        const pull = (4.5 - d) / 4.5 * 4.5;
+        pk.x += (bp.x - pk.x) / d * pull * dt;
+        pk.z += (bp.z - pk.z) / d * pull * dt;
+        pk.mesh.g.position.x = pk.x;
+        pk.mesh.g.position.z = pk.z;
+      }
+    }
+  }
+}
+
+// ─── Atmospheric dust/embers (floating background particles) ──
+const DUST_COUNT = IS_MOBILE ? 40 : 80;
+const dustGroup = new THREE.Group();
+scene.add(dustGroup);
+const dustParticles = [];
+for (let i = 0; i < DUST_COUNT; i++) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05 + Math.random() * 0.04, 4, 3),
+    new THREE.MeshBasicMaterial({
+      color: Math.random() < 0.6 ? 0xff7028 : 0xffd070,
+      transparent: true, opacity: 0.5 + Math.random() * 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    })
+  );
+  const x = (Math.random() - 0.5) * ARENA * 1.6;
+  const z = (Math.random() - 0.5) * ARENA * 1.6;
+  const y = 1 + Math.random() * 6;
+  m.position.set(x, y, z);
+  dustGroup.add(m);
+  dustParticles.push({
+    m, vy: 0.2 + Math.random() * 0.5,
+    drift: (Math.random() - 0.5) * 0.3,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+let dustT = 0;
+function updateDust(dt) {
+  dustT += dt;
+  for (const p of dustParticles) {
+    p.m.position.y += p.vy * dt;
+    p.m.position.x += Math.sin(dustT * 0.3 + p.phase) * p.drift * dt * 6;
+    if (p.m.position.y > 8) {
+      p.m.position.y = -0.5;
+      p.m.position.x = (Math.random() - 0.5) * ARENA * 1.6;
+      p.m.position.z = (Math.random() - 0.5) * ARENA * 1.6;
+    }
+    p.m.material.opacity = (0.4 + Math.sin(dustT * 1.6 + p.phase) * 0.3);
   }
 }
 
@@ -2513,6 +2571,8 @@ let prevT = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - prevT) / 1000);
   prevT = now;
+  // Atmospheric dust always animates (cheap)
+  updateDust(dt);
   if (G.phase === 'menu') {
     tickHeroScene(dt);
   } else if (!paused && (G.phase === 'play' || G.phase === 'rest' || G.phase === 'shop')) {
