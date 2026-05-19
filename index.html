@@ -437,6 +437,24 @@ html, body {
   animation: killToastAnim 1.2s ease-out forwards;
   z-index: 13; letter-spacing: 0.05em;
 }
+.dmgNumber {
+  position: absolute; pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 900; font-size: 18px;
+  color: #ffffff;
+  text-shadow: 0 2px 0 #000, 0 0 8px rgba(0,0,0,0.85), 0 4px 12px rgba(0,0,0,0.5);
+  animation: dmgNumberAnim 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  z-index: 13; letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.dmgNumber.crit  { font-size: 26px; color: #ffe27a; text-shadow: 0 2px 0 #4a2a00, 0 0 14px rgba(255,200,80,0.7); }
+.dmgNumber.heavy { font-size: 24px; color: #ff6a3a; text-shadow: 0 2px 0 #2a0a00, 0 0 14px rgba(255,90,40,0.65); }
+@keyframes dmgNumberAnim {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-8deg); }
+  15%  { opacity: 1; transform: translate(-50%, -85%) scale(1.25) rotate(2deg); }
+  30%  { opacity: 1; transform: translate(-50%, -100%) scale(0.95) rotate(0); }
+  100% { opacity: 0; transform: translate(-50%, -210%) scale(0.7) rotate(0); }
+}
 @keyframes killToastAnim {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
   20%  { opacity: 1; transform: translate(-50%, -100%) scale(1.1); }
@@ -1761,6 +1779,7 @@ function spawnGroundPool(x, z, scale = 1) {
 function spawnKillToast(worldX, worldY, worldZ, text, isCombo = false) {
   const v = new THREE.Vector3(worldX, worldY, worldZ);
   v.project(camera);
+  if (v.z > 1) return;
   const sx = (v.x*0.5 + 0.5) * window.innerWidth;
   const sy = (-v.y*0.5 + 0.5) * window.innerHeight;
   const el = document.createElement('div');
@@ -1770,6 +1789,22 @@ function spawnKillToast(worldX, worldY, worldZ, text, isCombo = false) {
   el.style.left = sx + 'px'; el.style.top = sy + 'px';
   $('hud').appendChild(el);
   setTimeout(() => el.remove(), 1300);
+}
+const _dmgV = new THREE.Vector3();
+function spawnDmgNumber(worldX, worldY, worldZ, value, opts = {}) {
+  _dmgV.set(worldX, worldY, worldZ).project(camera);
+  if (_dmgV.z > 1) return;
+  // Random jitter so stacked hits don't overlap
+  const jx = (Math.random() - 0.5) * 36;
+  const jy = (Math.random() - 0.5) * 12;
+  const sx = (_dmgV.x*0.5 + 0.5) * window.innerWidth + jx;
+  const sy = (-_dmgV.y*0.5 + 0.5) * window.innerHeight + jy;
+  const el = document.createElement('div');
+  el.className = 'dmgNumber' + (opts.cls ? ' ' + opts.cls : '');
+  el.textContent = value;
+  el.style.left = sx + 'px'; el.style.top = sy + 'px';
+  $('hud').appendChild(el);
+  setTimeout(() => el.remove(), 760);
 }
 
 // ─── Input ─────────────────────────────────────────────────
@@ -2156,9 +2191,10 @@ function simulate(dt) {
       const ox = p.x + dx*0.55, oz = p.z + dz*0.55;
       const r = castShot(ox, oz, dx, dz);
       const hx = ox + dx*r.t, hz = oz + dz*r.t;
-      pendingShots.push({ ox, oy: 1.18, oz, hx, hy: 1.18, hz, ownerIdx: i, hit: r.hit });
+      const isCrit = p.pwDmg > 0;
+      const dmg = r.hit === 'zombie' ? BASE_BULLET_DAMAGE * (isCrit ? 2 : 1) : 0;
+      pendingShots.push({ ox, oy: 1.18, oz, hx, hy: 1.18, hz, ownerIdx: i, hit: r.hit, dmg, crit: isCrit });
       if (r.hit === 'zombie') {
-        const dmg = BASE_BULLET_DAMAGE * (p.pwDmg > 0 ? 2 : 1);
         r.zombie.hp -= dmg;
         r.zombie.hitT = 0.14;
         if (r.zombie.hp <= 0 && r.zombie.alive) {
@@ -2352,7 +2388,7 @@ function onMsg(msg) {
       if (!prIds.has(state.projectiles[i].id)) state.projectiles.splice(i, 1);
     }
   } else if (msg.t === 'shot') {
-    handleShotEffect(msg.ox, msg.oy, msg.oz, msg.hx, msg.hy, msg.hz, msg.hit, msg.o);
+    handleShotEffect(msg.ox, msg.oy, msg.oz, msg.hx, msg.hy, msg.hz, msg.hit, msg.o, msg.d || 0, !!msg.c);
   } else if (msg.t === 'kill') {
     handleKillEffect(msg.x, msg.y, msg.z, msg.type, msg.score, msg.combo);
   } else if (msg.t === 'explode') {
@@ -2372,8 +2408,8 @@ function sendState() {
   send({ t: 'state', ph: state.phase, wv: state.wave, sc: state.score, kl: state.kills, pt: state.phaseTimer, p, z, pk, pr });
   while (pendingShots.length) {
     const s = pendingShots.shift();
-    send({ t: 'shot', ox: s.ox, oy: s.oy, oz: s.oz, hx: s.hx, hy: s.hy, hz: s.hz, o: s.ownerIdx, hit: s.hit });
-    handleShotEffect(s.ox, s.oy, s.oz, s.hx, s.hy, s.hz, s.hit, s.ownerIdx);
+    send({ t: 'shot', ox: s.ox, oy: s.oy, oz: s.oz, hx: s.hx, hy: s.hy, hz: s.hz, o: s.ownerIdx, hit: s.hit, d: s.dmg, c: s.crit ? 1 : 0 });
+    handleShotEffect(s.ox, s.oy, s.oz, s.hx, s.hy, s.hz, s.hit, s.ownerIdx, s.dmg, s.crit);
   }
   while (pendingKills.length) {
     const k = pendingKills.shift();
@@ -2391,11 +2427,12 @@ function sendState() {
     handlePickupCollectedEffect(p.x, p.z, p.type, p.idx);
   }
 }
-function handleShotEffect(ox, oy, oz, hx, hy, hz, hit, ownerIdx) {
+function handleShotEffect(ox, oy, oz, hx, hy, hz, hit, ownerIdx, dmg, crit) {
   spawnTracer(ox, oy, oz, hx, hy, hz);
   if (hit === 'zombie') {
-    spawnHit(hx, hy, hz, 0xff4422, 0.25);
-    spawnBlood(hx, hy, hz, 6);
+    spawnHit(hx, hy, hz, 0xff4422, 0.28);
+    spawnBlood(hx, hy, hz, 8);
+    if (dmg) spawnDmgNumber(hx, hy + 0.4, hz, dmg, { cls: crit ? 'crit' : '' });
   } else if (hit === 'wall') {
     spawnHit(hx, hy, hz, 0xffeeaa, 0.18);
     spawnSparks(hx, hy, hz, 5);
