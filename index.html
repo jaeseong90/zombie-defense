@@ -331,7 +331,7 @@ html, body {
   pointer-events: none; text-align: center;
   z-index: 14; opacity: 0; transition: opacity 0.3s;
 }
-#waveIntro.show { opacity: 1; animation: waveIntroAnim 2.6s ease-out; }
+#waveIntro.show { opacity: 0; animation: waveIntroAnim 2.6s ease-out forwards; }
 @keyframes waveIntroAnim {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); filter: blur(20px); }
   12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08); filter: blur(0); }
@@ -2656,6 +2656,8 @@ function syncZombieMeshes(dt) {
     seen.add(z.id);
     let info = zombieMeshes.get(z.id);
     if (!info) {
+      // Don't re-spawn meshes for already-dead zombies (host bug: dead zombies linger in state.zombies)
+      if (!z.alive) continue;
       const created = createZombieMesh(z.type);
       scene.add(created.g);
       info = { g: created.g, parts: created, type: z.type, dying: false, dyingT: 0 };
