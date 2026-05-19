@@ -969,6 +969,7 @@ function damagePlayer(p, dmg, isCrit = false) {
     setTimeout(() => dmgFlashEl.classList.remove('flash'), 60);
     shake(0.4);
     spawnDmgNumber(p.x, 1.9, p.z, Math.round(dmg), 'self');
+    vib(dmg > 20 ? 80 : 30);
   }
   if (p.hp <= 0) { p.hp = 0; p.alive = false; }
 }
@@ -982,6 +983,9 @@ function spawnPickup(x, z, type) {
 
 function collectPickup(p, pk) {
   const spec = PICKUP[pk.type];
+  if (p.idx === G.myIdx) vib(15);
+  pendingEvents.push({ t: 'pickup', x: pk.x, z: pk.z, c: spec.em });
+  ensureAudio(); audio.pickup?.();
   if (spec.instant) {
     p.hp = Math.min(p.maxHp, p.hp + spec.hpRestore);
     spawnDmgNumber(p.x, 2.0, p.z, '+HP', 'score');
@@ -1049,6 +1053,7 @@ function triggerSuper(p) {
   shake(1.2);
   pendingEvents.push({ t: 'super', x: p.x, z: p.z });
   ensureAudio(); audio.super?.();
+  vib(120);
 }
 
 // ─── ZOMBIE AI ──────────────────────────────────────────────
@@ -1467,6 +1472,7 @@ function startWave(idx) {
   else waveBoxEl.classList.toggle('boss', !!w.boss);
   pendingEvents.push({ t: 'wave', n: G.wave });
   ensureAudio(); audio.wave?.();
+  vib(60);
 }
 
 function updateWave(dt) {
@@ -1486,7 +1492,10 @@ function updateWave(dt) {
       G.phase = 'win';
       pendingEvents.push({ t: 'win' });
       ensureAudio(); audio.win?.();
-      showBanner('🏆 VICTORY', '10 웨이브 클리어', '메인 메뉴');
+      vib([60, 60, 120]);
+      const best = saveBest();
+      stopMusic();
+      showBanner('🏆 VICTORY', `SCORE ${G.score.toLocaleString()} · BEST ${best.bestScore.toLocaleString()}`, '메인 메뉴');
     } else if (G.isCoop) {
       // Coop: just rest (shop is solo-only for now)
       G.phase = 'rest';
@@ -1592,7 +1601,10 @@ function updateHUD(dt) {
       G.phase = 'lose';
       pendingEvents.push({ t: 'lose' });
       ensureAudio(); audio.lose?.();
-      showBanner('💀 ELIMINATED', `웨이브 ${G.wave}에서 전멸`, '다시 시작');
+      vib([120, 80, 120]);
+      const best = saveBest();
+      stopMusic();
+      showBanner('💀 ELIMINATED', `웨이브 ${G.wave} · SCORE ${G.score.toLocaleString()} · BEST ${best.bestScore.toLocaleString()}`, '다시 시작');
     }
   }
 }
@@ -1637,6 +1649,7 @@ function startGame(coop = false, isPeerJoin = false) {
   hudEl.classList.remove('hidden');
   enterImmersive();
   ensureAudio();
+  startMusic();
   if (!isPeerJoin) startWave(0);
   // First HUD draw
   hp2Card.classList.toggle('hidden', !coop);
@@ -1680,6 +1693,7 @@ function setupConn(c) {
 function onDisconnect() {
   connected = false;
   if (G.phase === 'play' || G.phase === 'rest') {
+    stopMusic();
     showBanner('🔌 연결 끊김', '상대방과의 연결이 해제되었습니다', '메인 메뉴');
   }
 }
@@ -2025,6 +2039,106 @@ function playLose() {
 function playDmg() {
   sweep(180, 80, 0.25, 'square', 0.16);
 }
+
+// ─── Music (looping procedural drone + beat) ─────────────────
+let musicGain = null;
+let musicOsc1 = null, musicOsc2 = null, musicLfo = null;
+let musicBeatHandle = null;
+function startMusic() {
+  if (!actx || musicGain) return;
+  musicGain = actx.createGain();
+  musicGain.gain.value = 0.038;
+  musicGain.connect(actx.destination);
+  // Low drone (A1 + E2 fifth)
+  musicOsc1 = actx.createOscillator();
+  musicOsc1.type = 'sawtooth';
+  musicOsc1.frequency.value = 55;
+  const filter1 = actx.createBiquadFilter();
+  filter1.type = 'lowpass'; filter1.frequency.value = 240; filter1.Q.value = 6;
+  musicOsc1.connect(filter1); filter1.connect(musicGain);
+  musicOsc1.start();
+  musicOsc2 = actx.createOscillator();
+  musicOsc2.type = 'sawtooth';
+  musicOsc2.frequency.value = 82.5;
+  const filter2 = actx.createBiquadFilter();
+  filter2.type = 'lowpass'; filter2.frequency.value = 320; filter2.Q.value = 4;
+  const g2 = actx.createGain(); g2.gain.value = 0.6;
+  musicOsc2.connect(filter2); filter2.connect(g2); g2.connect(musicGain);
+  musicOsc2.start();
+  // LFO for tension
+  musicLfo = actx.createOscillator();
+  musicLfo.frequency.value = 0.18;
+  const lfoGain = actx.createGain();
+  lfoGain.gain.value = 0.012;
+  musicLfo.connect(lfoGain);
+  lfoGain.connect(musicGain.gain);
+  musicLfo.start();
+  // Beat: low kick every ~2 sec
+  let beat = 0;
+  musicBeatHandle = setInterval(() => {
+    if (!actx) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(80, t);
+    o.frequency.exponentialRampToValueAtTime(35, t + 0.18);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t); o.stop(t + 0.2);
+    // Hihat-ish at half-beat
+    if (beat % 2 === 1) {
+      const buf = actx.createBuffer(1, 0.05 * actx.sampleRate, actx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+      const s = actx.createBufferSource();
+      s.buffer = buf;
+      const f = actx.createBiquadFilter();
+      f.type = 'highpass'; f.frequency.value = 4000;
+      const gh = actx.createGain(); gh.gain.value = 0.08;
+      s.connect(f); f.connect(gh); gh.connect(actx.destination);
+      s.start();
+    }
+    beat++;
+  }, 1100);
+}
+function stopMusic() {
+  if (musicOsc1) { try { musicOsc1.stop(); } catch {}; musicOsc1 = null; }
+  if (musicOsc2) { try { musicOsc2.stop(); } catch {}; musicOsc2 = null; }
+  if (musicLfo) { try { musicLfo.stop(); } catch {}; musicLfo = null; }
+  if (musicBeatHandle) { clearInterval(musicBeatHandle); musicBeatHandle = null; }
+  musicGain = null;
+}
+
+// ─── Haptic vibration helper ──────────────────────────────────
+function vib(ms) { try { navigator.vibrate?.(ms); } catch {} }
+
+// ─── Best score persistence ───────────────────────────────────
+const STORE_KEY = 'dc_best_v1';
+function loadBest() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveBest() {
+  const cur = loadBest();
+  if (!cur.bestScore || G.score > cur.bestScore) cur.bestScore = G.score;
+  if (!cur.bestWave  || G.wave  > cur.bestWave)  cur.bestWave  = G.wave;
+  cur.totalKills = (cur.totalKills || 0) + G.kills;
+  cur.totalRuns = (cur.totalRuns || 0) + 1;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(cur)); } catch {}
+  return cur;
+}
+function showBest() {
+  const cur = loadBest();
+  if (!cur.bestScore) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'font-size:10px;letter-spacing:0.28em;color:var(--text-muted);font-weight:700;margin-top:14px;';
+  el.innerHTML = `BEST · <span style="color:var(--accent-gold);">${cur.bestScore.toLocaleString()}</span> · WAVE ${cur.bestWave}/10 · TOTAL KILLS ${cur.totalKills || 0}`;
+  const left = document.getElementById('menuFeatures');
+  if (left) left.parentNode.appendChild(el);
+}
+showBest();
 
 // Wire local sound effects (single-player and host-side)
 const _origFire = firePlayerWeapon;
