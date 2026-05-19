@@ -1269,14 +1269,31 @@ function syncPlayerMeshes(dt) {
   for (const p of G.players) {
     const pm = p.mesh;
     pm.g.visible = p.alive;
-    const moving = Math.hypot(p.vx, p.vz) > 0.5;
+    const speed = Math.hypot(p.vx, p.vz);
+    const moving = speed > 0.5;
     const bobF = moving ? 10 : 2.4;
-    const bobA = moving ? 0.06 : 0.025;
+    const bobA = moving ? 0.07 : 0.025;
     pm.g.position.set(p.x, Math.abs(Math.sin(G.t * bobF + p.idx * 0.7)) * bobA, p.z);
     pm.g.rotation.y = p.a;
-    const swing = Math.sin(p.walkPhase) * 0.45;
+    // Body lean in direction of motion (world-aligned, looks natural in ortho)
+    const leanK = 0.14;
+    pm.g.rotation.x = (p.vz / PLAYER_SPEED) * leanK;
+    pm.g.rotation.z = -(p.vx / PLAYER_SPEED) * leanK;
+    const leanAmt = Math.min(1, speed / PLAYER_SPEED) * leanK;
+    // Bigger walk swing when moving fast
+    const swing = Math.sin(p.walkPhase) * (moving ? 0.5 : 0.08);
     pm.legL.rotation.x = swing;
     pm.legR.rotation.x = -swing;
+    // Arm sway in time with legs (counter-phase)
+    if (pm.armL) {
+      const aSwing = Math.sin(p.walkPhase + Math.PI) * (moving ? 0.18 : 0.04);
+      pm.armL.rotation.x = -0.7 + aSwing;
+      pm.armR.rotation.x = -0.7 - aSwing;
+    }
+    // Head bob — slight independent counter-tilt to stabilize gaze
+    if (pm.head) {
+      pm.head.rotation.x = -leanAmt * 0.6;
+    }
     // Hit squash
     if (p.hitT > 0) {
       const hk = p.hitT / 0.18;
