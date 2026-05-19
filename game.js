@@ -4,59 +4,22 @@
 // ============================================================
 
 import * as THREE from 'three';
+import {
+  ARENA, PLAYER_R, PLAYER_SPEED, PLAYER_HP_MAX, PLAYER_REGEN_DELAY, PLAYER_REGEN_RATE,
+  BASE_FIRE_INT, BASE_DMG, BULLET_SPEED, BULLET_LIFE, SUPER_FULL,
+  SPAWN_INT, REST_TIME, PICKUP_DROP, MAX_ZOMBIES,
+  ZTYPE, PICKUP, WAVES, UPGRADES, comboMultiplier,
+} from './src/data.js';
+import { settings, vib, loadBest, saveBest as _saveBest, saveSettings } from './src/settings.js';
+import { audio, ensureAudio, startMusic, stopMusic } from './src/audio.js';
 
 // ─── Detect mobile ───────────────────────────────────────────
 const IS_MOBILE =
   matchMedia('(pointer: coarse)').matches ||
   Math.min(window.innerWidth, window.innerHeight) < 600;
 
-// ============================================================
-// CONFIG / DATA
-// ============================================================
-const ARENA = 32;                  // arena half-size: -16..+16
-const PLAYER_R = 0.55;
-const PLAYER_SPEED = 7.2;
-const PLAYER_HP_MAX = 100;
-const PLAYER_REGEN_DELAY = 3.5;
-const PLAYER_REGEN_RATE = 7;
-const BASE_FIRE_INT = 0.11;
-const BASE_DMG = 18;
-const BULLET_SPEED = 32;
-const BULLET_LIFE = 0.85;
-const SUPER_FULL = 100;
-
-const ZTYPE = {
-  walker:  { hp: 36,  spd: 2.4, dmg: 8,  atkInt: 1.0, atkR: 1.2, sz: 1.0,  score: 10, body: 0x7ab23f, dark: 0x42651e, skin: 0xcad97a, eye: 0xff3322, name: 'WALKER' },
-  runner:  { hp: 22,  spd: 5.0, dmg: 6,  atkInt: 0.7, atkR: 1.1, sz: 0.85, score: 18, body: 0xd83a4f, dark: 0x6a1518, skin: 0xf08080, eye: 0xff8800, name: 'RUNNER' },
-  spitter: { hp: 38,  spd: 1.8, dmg: 14, atkInt: 1.8, atkR: 12.0, sz: 1.05, score: 24, body: 0x4eb238, dark: 0x215a1a, skin: 0xa8e060, eye: 0x88ff44, name: 'SPITTER', ranged: true, projSpd: 14, projDmg: 14 },
-  bomber:  { hp: 18,  spd: 3.8, dmg: 0,  atkInt: 0.1, atkR: 1.4, sz: 0.95, score: 22, body: 0xff7028, dark: 0x802a0e, skin: 0xffc070, eye: 0xff4400, name: 'BOMBER', explodes: true, expDmg: 36, expR: 3.2 },
-  brute:   { hp: 220, spd: 1.4, dmg: 26, atkInt: 1.4, atkR: 1.6, sz: 1.85, score: 80, body: 0x556b3e, dark: 0x1f2818, skin: 0x8c7f4a, eye: 0xff0044, name: 'BRUTE' },
-};
-
-const PICKUP = {
-  hp:      { name: 'MEDKIT',  color: 0x3ddc84, em: 0x2ecc71, icon: '❤', instant: true,  hpRestore: 40 },
-  dmg:     { name: 'DAMAGE',  color: 0xb46bff, em: 0x9038ff, icon: '⚡', dur: 12, key: 'dmgT'   },
-  rapid:   { name: 'RAPID',   color: 0xffeb3b, em: 0xffc107, icon: '🔥', dur: 12, key: 'rapidT' },
-  shotgun: { name: 'SHOTGUN', color: 0xff7028, em: 0xff5a3a, icon: '💥', dur: 14, key: 'shotgunT' },
-  shield:  { name: 'SHIELD',  color: 0x4a9eff, em: 0x6ab4ff, icon: '🛡', dur: 8,  key: 'shieldT' },
-};
-
-const WAVES = [
-  { walker: 5,  runner: 0, spitter: 0, bomber: 0, brute: 0, desc: 'PREPARE FOR ASSAULT' },
-  { walker: 7,  runner: 3, spitter: 0, bomber: 0, brute: 0, desc: 'RUNNERS INCOMING', event: 'speed' },
-  { walker: 6,  runner: 4, spitter: 2, bomber: 0, brute: 0, desc: 'TOXIC FOG',         event: 'fog' },
-  { walker: 5,  runner: 3, spitter: 2, bomber: 0, brute: 2, desc: 'BRUTE WARNING',     boss: true,  event: 'brutal' },
-  { walker: 7,  runner: 5, spitter: 2, bomber: 2, brute: 0, desc: 'BOMBER RUSH',       event: 'chaos' },
-  { walker: 6,  runner: 7, spitter: 3, bomber: 3, brute: 0, desc: 'BLACKOUT',          event: 'dark' },
-  { walker: 6,  runner: 5, spitter: 3, bomber: 2, brute: 3, desc: 'BRUTE PACK',        boss: true,  event: 'brutal' },
-  { walker: 8,  runner: 8, spitter: 4, bomber: 4, brute: 0, desc: 'FRENZY',            event: 'frenzy' },
-  { walker: 10, runner: 8, spitter: 5, bomber: 4, brute: 1, desc: 'OVERRUN',           event: 'frenzy' },
-  { walker: 8,  runner: 10,spitter: 5, bomber: 5, brute: 4, desc: 'FINAL STAND',       boss: true,  event: 'final' },
-];
-const SPAWN_INT = 0.42;
-const REST_TIME = 5.0;
-const PICKUP_DROP = 0.13;       // chance per kill
-const MAX_ZOMBIES = 24;
+// Adapter: keep old saveBest() call sites working
+function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // ============================================================
 // DOM HELPERS
@@ -341,6 +304,9 @@ function createPlayerMesh(idx) {
   const accentDeep = isP1 ? 0x1f4cc8 : 0x1c9054;
   const accentGlow = isP1 ? 0x7ec0ff : 0x9cf2c8;
   const g = new THREE.Group();
+  // Upper body rotates with aim, lower body rotates with movement
+  const lower = new THREE.Group(); g.add(lower);
+  const upper = new THREE.Group(); g.add(upper);
 
   const vest   = tmat(accent,     { emissive: accentGlow, emissiveIntensity: 0.13 });
   const aDark  = tmat(accentDeep);
@@ -351,74 +317,74 @@ function createPlayerMesh(idx) {
   const gunMet = tmat(0x3c3e4a);
   const boot   = tmat(0x0d0d14);
 
-  // Boots
+  // Boots (lower)
   const bootGeo = new THREE.BoxGeometry(0.32, 0.22, 0.5);
   const bL = outlined(new THREE.Mesh(bootGeo, boot), 1.07);
-  bL.position.set(-0.2, 0.11, 0.06); bL.castShadow = !IS_MOBILE; g.add(bL);
+  bL.position.set(-0.2, 0.11, 0.06); bL.castShadow = !IS_MOBILE; lower.add(bL);
   const bR = outlined(new THREE.Mesh(bootGeo, boot), 1.07);
-  bR.position.set( 0.2, 0.11, 0.06); bR.castShadow = !IS_MOBILE; g.add(bR);
-  // Legs (stubby)
+  bR.position.set( 0.2, 0.11, 0.06); bR.castShadow = !IS_MOBILE; lower.add(bR);
+  // Legs — lower
   const legGeo = new THREE.CylinderGeometry(0.18, 0.16, 0.45, 10);
   const lL = outlined(new THREE.Mesh(legGeo, pants), 1.07);
-  lL.position.set(-0.2, 0.42, 0); lL.castShadow = !IS_MOBILE; g.add(lL);
+  lL.position.set(-0.2, 0.42, 0); lL.castShadow = !IS_MOBILE; lower.add(lL);
   const lR = outlined(new THREE.Mesh(legGeo, pants), 1.07);
-  lR.position.set( 0.2, 0.42, 0); lR.castShadow = !IS_MOBILE; g.add(lR);
+  lR.position.set( 0.2, 0.42, 0); lR.castShadow = !IS_MOBILE; lower.add(lR);
   // Torso
   const tor = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.6, 0.48), vest), 1.05);
-  tor.position.set(0, 0.92, 0); tor.castShadow = !IS_MOBILE; g.add(tor);
+  tor.position.set(0, 0.92, 0); tor.castShadow = !IS_MOBILE; upper.add(tor);
   // Chest plate
   const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.06), aDark);
-  plate.position.set(0, 0.95, 0.24); g.add(plate);
+  plate.position.set(0, 0.95, 0.24); upper.add(plate);
   const chest = new THREE.Mesh(new THREE.CircleGeometry(0.07, 18),
     new THREE.MeshBasicMaterial({ color: accentGlow }));
-  chest.position.set(0, 1.05, 0.275); g.add(chest);
+  chest.position.set(0, 1.05, 0.275); upper.add(chest);
   // Belt
   const belt = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.08, 0.5), tmat(0x111319));
-  belt.position.set(0, 0.66, 0); g.add(belt); outlined(belt, 1.04);
+  belt.position.set(0, 0.66, 0); upper.add(belt); outlined(belt, 1.04);
   // Backpack
   const backpack = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.24), tmat(0x222a36)), 1.05);
-  backpack.position.set(0, 1.04, 0.34); g.add(backpack);
+  backpack.position.set(0, 1.04, 0.34); upper.add(backpack);
   const bpStrap1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.04), tmat(0x111319));
-  bpStrap1.position.set(-0.2, 1.0, 0.24); g.add(bpStrap1);
-  const bpStrap2 = bpStrap1.clone(); bpStrap2.position.x = 0.2; g.add(bpStrap2);
+  bpStrap1.position.set(-0.2, 1.0, 0.24); upper.add(bpStrap1);
+  const bpStrap2 = bpStrap1.clone(); bpStrap2.position.x = 0.2; upper.add(bpStrap2);
   // Shoulder pauldrons
   const shGeo = new THREE.SphereGeometry(0.2, 12, 10);
   const shL = outlined(new THREE.Mesh(shGeo, vest), 1.06);
-  shL.position.set(-0.48, 1.12, 0); g.add(shL);
+  shL.position.set(-0.48, 1.12, 0); upper.add(shL);
   const shR = outlined(new THREE.Mesh(shGeo, vest), 1.06);
-  shR.position.set( 0.48, 1.12, 0); g.add(shR);
+  shR.position.set( 0.48, 1.12, 0); upper.add(shR);
   // Forearms
   const armGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.42, 10);
   const aL = outlined(new THREE.Mesh(armGeo, vest), 1.06);
-  aL.position.set(-0.46, 0.84, -0.12); aL.rotation.x = -0.7; g.add(aL);
+  aL.position.set(-0.46, 0.84, -0.12); aL.rotation.x = -0.7; upper.add(aL);
   const aR = outlined(new THREE.Mesh(armGeo, vest), 1.06);
-  aR.position.set( 0.46, 0.84, -0.12); aR.rotation.x = -0.7; g.add(aR);
+  aR.position.set( 0.46, 0.84, -0.12); aR.rotation.x = -0.7; upper.add(aR);
   // Gloves
   const glove = new THREE.SphereGeometry(0.13, 12, 10);
   const gL = outlined(new THREE.Mesh(glove, gun), 1.06);
-  gL.position.set(-0.38, 0.76, -0.58); g.add(gL);
+  gL.position.set(-0.38, 0.76, -0.58); upper.add(gL);
   const gR = outlined(new THREE.Mesh(glove, gun), 1.06);
-  gR.position.set( 0.38, 0.76, -0.58); g.add(gR);
+  gR.position.set( 0.38, 0.76, -0.58); upper.add(gR);
   // Head
   const head = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.36, 18, 14), skin), 1.05);
-  head.position.set(0, 1.5, 0); head.castShadow = !IS_MOBILE; g.add(head);
+  head.position.set(0, 1.5, 0); head.castShadow = !IS_MOBILE; upper.add(head);
   // Helmet
   const helmet = outlined(new THREE.Mesh(
     new THREE.SphereGeometry(0.41, 18, 12, 0, Math.PI*2, 0, Math.PI/1.85), helm), 1.04);
-  helmet.position.set(0, 1.55, 0); helmet.castShadow = !IS_MOBILE; g.add(helmet);
+  helmet.position.set(0, 1.55, 0); helmet.castShadow = !IS_MOBILE; upper.add(helmet);
   // Helmet rim
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.035, 8, 28), aDark);
-  rim.position.set(0, 1.45, 0); rim.rotation.x = Math.PI/2; g.add(rim);
+  rim.position.set(0, 1.45, 0); rim.rotation.x = Math.PI/2; upper.add(rim);
   // Visor (signature glowing strip)
   const visor = new THREE.Mesh(
     new THREE.SphereGeometry(0.37, 18, 8, 0, Math.PI*2, Math.PI/2 - 0.18, 0.28),
     new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0.95 }),
   );
-  visor.position.set(0, 1.5, 0); g.add(visor);
+  visor.position.set(0, 1.5, 0); upper.add(visor);
   // Team disc on helmet top
   const team = new THREE.Mesh(new THREE.CircleGeometry(0.14, 18),
     new THREE.MeshBasicMaterial({ color: accentGlow }));
-  team.position.set(0, 1.86, 0); team.rotation.x = -Math.PI/2; g.add(team);
+  team.position.set(0, 1.86, 0); team.rotation.x = -Math.PI/2; upper.add(team);
 
   // RIFLE
   const rifle = new THREE.Group();
@@ -439,25 +405,25 @@ function createPlayerMesh(idx) {
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.7), aDark);
   stripe.position.set(0, 0.15, -0.1); rifle.add(stripe);
   rifle.position.set(0.08, 0.88, -0.18);
-  g.add(rifle);
+  upper.add(rifle);
 
   // Muzzle flash
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 12),
     new THREE.MeshBasicMaterial({ color: 0xffe5a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flash.position.set(0.08, 0.91, -1.32); g.add(flash);
+  flash.position.set(0.08, 0.91, -1.32); upper.add(flash);
   const flashCore = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10),
     new THREE.MeshBasicMaterial({ color: 0xfff8c0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flashCore.position.set(0.08, 0.91, -1.28); g.add(flashCore);
+  flashCore.position.set(0.08, 0.91, -1.28); upper.add(flashCore);
 
   // Powerup aura
   const aura = new THREE.Mesh(new THREE.SphereGeometry(1.05, 24, 16),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  aura.position.y = 0.85; g.add(aura);
+  aura.position.y = 0.85; upper.add(aura);
 
   // Shield bubble (when shield active)
   const shieldBubble = new THREE.Mesh(new THREE.SphereGeometry(1.0, 24, 18),
     new THREE.MeshBasicMaterial({ color: 0x4a9eff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-  shieldBubble.position.y = 0.9; g.add(shieldBubble);
+  shieldBubble.position.y = 0.9; upper.add(shieldBubble);
 
   // Aim indicator (thin line on ground toward aim direction)
   const aimGeo = new THREE.PlaneGeometry(0.18, 5);
@@ -465,9 +431,9 @@ function createPlayerMesh(idx) {
   const aimLine = new THREE.Mesh(aimGeo, aimMat);
   aimLine.rotation.x = -Math.PI / 2;
   aimLine.position.set(0, 0.03, -2.5);
-  g.add(aimLine);
+  upper.add(aimLine);
 
-  return { g, rifle, flash, flashCore, legL: lL, legR: lR, aura, shieldBubble, head, armL: aL, armR: aR, aimLine };
+  return { g, lower, upper, rifle, flash, flashCore, legL: lL, legR: lR, aura, shieldBubble, head, armL: aL, armR: aR, aimLine };
 }
 
 // ─── ZOMBIE MESH ─────────────────────────────────────────────
@@ -712,69 +678,71 @@ function makePlayer(idx) {
 // ============================================================
 // INPUT (joysticks + super + items)
 // ============================================================
+// ─── Dynamic joysticks — appear at finger position on touchZone ──
 const joys = { move: null, aim: null };
-const JOY_MAX = 56;
-function setupJoystick(elId, key) {
-  const root = $(elId);
-  const knob = root.querySelector('.joyKnob');
-  const base = root.querySelector('.joyBase');
-  let pointerId = null;
-  let cx = 0, cy = 0;
+const JOY_MAX = 64;
+function setupDynamicJoystick(zoneId, joyId, key) {
+  const zone = $(zoneId);
+  const joy = $(joyId);
+  const knob = joy.querySelector('.joyKnob');
+  const hint = $(key === 'move' ? 'moveHint' : 'aimHint');
 
-  function start(ev) {
-    const t = ev.touches ? ev.touches[0] : ev;
-    if (ev.touches && joys[key]?.pid != null) return; // already tracking
-    const rect = base.getBoundingClientRect();
-    cx = rect.left + rect.width / 2;
-    cy = rect.top + rect.height / 2;
-    pointerId = ev.pointerId ?? (ev.touches ? ev.changedTouches[0].identifier : 'mouse');
-    joys[key] = { pid: pointerId, dx: 0, dy: 0 };
-    move(ev);
-    ev.preventDefault();
+  function place(joy, cx, cy) {
+    joy.style.left = cx + 'px';
+    joy.style.top  = cy + 'px';
   }
-  function move(ev) {
-    if (joys[key] == null) return;
-    let cl;
-    if (ev.touches) {
-      for (const t of ev.touches) {
-        if (t.identifier === joys[key].pid) { cl = t; break; }
-      }
-      if (!cl) return;
-    } else {
-      cl = ev;
-    }
-    const dx = cl.clientX - cx;
-    const dy = cl.clientY - cy;
+  function setKnob(dx, dy) {
     const len = Math.hypot(dx, dy);
     let kx = dx, ky = dy;
     if (len > JOY_MAX) { kx = dx / len * JOY_MAX; ky = dy / len * JOY_MAX; }
-    joys[key].dx = kx; joys[key].dy = ky;
     knob.style.transform = `translate(${kx}px, ${ky}px)`;
-    ev.preventDefault();
+    joys[key].dx = kx; joys[key].dy = ky;
   }
-  function end(ev) {
-    if (joys[key] == null) return;
-    if (ev.touches) {
-      // Check if our pointer still in touches
-      let still = false;
-      for (const t of ev.touches) if (t.identifier === joys[key].pid) { still = true; break; }
-      if (still) return;
-    }
+  function start(clientX, clientY, pid) {
+    joys[key] = { pid, cx: clientX, cy: clientY, dx: 0, dy: 0 };
+    place(joy, clientX, clientY);
+    joy.classList.add('active');
+    hint?.classList.add('gone');
+    knob.style.transform = 'translate(0,0)';
+  }
+  function move(clientX, clientY) {
+    if (!joys[key]) return;
+    setKnob(clientX - joys[key].cx, clientY - joys[key].cy);
+  }
+  function end() {
     joys[key] = null;
-    knob.style.transform = 'translate(0, 0)';
+    joy.classList.remove('active');
+    knob.style.transform = 'translate(0,0)';
   }
   // Touch
-  root.addEventListener('touchstart', start, { passive: false });
-  document.addEventListener('touchmove', move, { passive: false });
-  document.addEventListener('touchend', end, { passive: false });
-  document.addEventListener('touchcancel', end, { passive: false });
-  // Mouse (for desktop testing)
-  root.addEventListener('mousedown', (e) => { start(e); });
-  document.addEventListener('mousemove', (e) => { if (joys[key]) move(e); });
-  document.addEventListener('mouseup', (e) => { joys[key] = null; knob.style.transform = 'translate(0,0)'; });
+  zone.addEventListener('touchstart', (e) => {
+    if (joys[key]) return; // already tracking a finger
+    const t = e.changedTouches[0];
+    start(t.clientX, t.clientY, t.identifier);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    if (!joys[key]) return;
+    for (const t of e.touches) {
+      if (t.identifier === joys[key].pid) { move(t.clientX, t.clientY); e.preventDefault(); return; }
+    }
+  }, { passive: false });
+  document.addEventListener('touchend', (e) => {
+    if (!joys[key]) return;
+    for (const t of e.touches) if (t.identifier === joys[key].pid) return; // still pressed
+    end();
+  });
+  document.addEventListener('touchcancel', end);
+  // Mouse for desktop testing
+  zone.addEventListener('mousedown', (e) => {
+    if (joys[key]) return;
+    start(e.clientX, e.clientY, 'mouse');
+  });
+  document.addEventListener('mousemove', (e) => { if (joys[key] && joys[key].pid === 'mouse') move(e.clientX, e.clientY); });
+  document.addEventListener('mouseup',   (e) => { if (joys[key] && joys[key].pid === 'mouse') end(); });
 }
-setupJoystick('joyMove', 'move');
-setupJoystick('joyAim', 'aim');
+setupDynamicJoystick('moveZone', 'joyMove', 'move');
+setupDynamicJoystick('aimZone',  'joyAim',  'aim');
 
 function joyVec(j) {
   if (!j) return { x: 0, y: 0, len: 0 };
@@ -1116,15 +1084,6 @@ function killZombie(z, ownerIdx) {
   }
   spawnHitParticles(z.x, 1.0, z.z, 0xa01010, 12);
 }
-function comboMultiplier(c, bonus = 0) {
-  let m;
-  if (c <= 1) m = 1;
-  else if (c <= 3) m = 1.5;
-  else if (c <= 5) m = 2;
-  else m = 2.5;
-  return m + bonus;
-}
-
 function bombExplode(bomb) {
   const spec = ZTYPE.bomber;
   // AOE damage to players
@@ -1525,13 +1484,17 @@ function syncPlayerMeshes(dt) {
       ? Math.abs(Math.sin(p.walkPhase * 0.5)) * 0.13
       : Math.abs(Math.sin(G.t * 2.4 + p.idx * 0.7)) * 0.03;
     pm.g.position.set(p.x, bob, p.z);
-    pm.g.rotation.y = p.a;
+    // Upper body rotates with aim direction (so rifle/flash align with shots)
+    pm.upper.rotation.y = p.a;
+    // Lower body rotates with movement direction (or aim if standing still)
+    const moveAngle = moving ? Math.atan2(p.vx, -p.vz) : p.a;
+    pm.lower.rotation.y = moveAngle;
     // Body lean in direction of motion (world-aligned, looks natural in ortho)
     const leanK = 0.16;
     pm.g.rotation.x = (p.vz / PLAYER_SPEED) * leanK;
     pm.g.rotation.z = -(p.vx / PLAYER_SPEED) * leanK + (moving ? Math.sin(p.walkPhase) * 0.06 : 0);
     const leanAmt = Math.min(1, speed / PLAYER_SPEED) * leanK;
-    // Big stride leg swing — clearly visible stepping
+    // Big stride leg swing — visible in lower body's local frame (along move direction)
     const swing = Math.sin(p.walkPhase) * (moving ? 0.75 : 0.08);
     pm.legL.rotation.x = swing;
     pm.legR.rotation.x = -swing;
@@ -1694,16 +1657,6 @@ function spawnDmgNumber(wx, wy, wz, value, cls = '') {
 // ============================================================
 // SHOP (upgrade cards between waves)
 // ============================================================
-const UPGRADES = [
-  { id: 'maxhp',  icon: '❤', name: '+ MAX HP',        desc: '+25 최대 HP, 지금 +25 회복',     apply: (p) => { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); } },
-  { id: 'dmg',    icon: '⚔', name: 'WEAPON UP',       desc: '+25% 데미지 (영구)',                  apply: (p) => { p.dmgMult *= 1.25; } },
-  { id: 'fire',   icon: '🔫', name: 'TRIGGER FINGER',  desc: '+15% 사격 속도 (영구)',           apply: (p) => { p.fireMult *= 0.85; } },
-  { id: 'heal',   icon: '➕', name: 'FIELD MEDIC',     desc: '풀피, 재생력 +40%',                   apply: (p) => { p.hp = p.maxHp; p.regenMult *= 1.4; } },
-  { id: 'super',  icon: '⚡', name: 'PRIMED',          desc: '슈퍼 충전 +30%',                          apply: (p) => { p.superGainMult *= 1.3; } },
-  { id: 'combo',  icon: '🎯', name: 'COMBO BOOST',     desc: '콤보 배율 +0.5',                          apply: (p) => { p.comboBonus += 0.5; } },
-  { id: 'speed',  icon: '👢', name: 'SWIFT BOOTS',     desc: '+12% 이동 속도',                          apply: (p) => { p.speedMult *= 1.12; } },
-  { id: 'shield', icon: '🛡', name: 'WAVE SHIELD',     desc: '매 웨이브 시작 3초 삟드', apply: (p) => { p.startShield = (p.startShield || 0) + 3; } },
-];
 let shopTimerHandle = null;
 // Initiate a new shop session (host or solo). Stores cards in G.shopCards.
 function startShop() {
@@ -2242,7 +2195,7 @@ function applyEvent(e) {
     audio?.wave?.();
   } else if (e.t === 'win') {
     audio?.win?.();
-    showBanner('🏆 VICTORY', '10 웨이브 클리어', '메인 메뉴');
+    showBanner('🏆 VICTORY', `${WAVES.length} 웨이브 클리어`, '메인 메뉴');
   } else if (e.t === 'lose') {
     audio?.lose?.();
     showBanner('💀 ELIMINATED', `웨이브 ${G.wave}에서 전멸`, '다시 시작');
@@ -2367,10 +2320,10 @@ joinInput.addEventListener('input', (e) => {
 $('btnJoinConfirm').addEventListener('click', doJoin);
 
 // ============================================================
-// AUDIO (procedural Web Audio synth)
-// ============================================================
-const audio = {};
-let actx = null;
+// AUDIO / SETTINGS — extracted to ./src/audio.js and ./src/settings.js
+// (Imports at top of this file.) Stub-out the duplicated definitions below:
+const _STUB_audio_block = (() => null); _STUB_audio_block();
+/*
 function ensureAudio() {
   if (actx) return;
   try {
@@ -2554,21 +2507,14 @@ function loadBest() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); }
   catch { return {}; }
 }
-function saveBest() {
-  const cur = loadBest();
-  if (!cur.bestScore || G.score > cur.bestScore) cur.bestScore = G.score;
-  if (!cur.bestWave  || G.wave  > cur.bestWave)  cur.bestWave  = G.wave;
-  cur.totalKills = (cur.totalKills || 0) + G.kills;
-  cur.totalRuns = (cur.totalRuns || 0) + 1;
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(cur)); } catch {}
-  return cur;
-}
+*/
+// End of stubbed-out audio/settings block
 function showBest() {
   const cur = loadBest();
   if (!cur.bestScore) return;
   const el = document.createElement('div');
   el.style.cssText = 'font-size:10px;letter-spacing:0.28em;color:var(--text-muted);font-weight:700;margin-top:14px;';
-  el.innerHTML = `BEST · <span style="color:var(--accent-gold);">${cur.bestScore.toLocaleString()}</span> · WAVE ${cur.bestWave}/10 · TOTAL KILLS ${cur.totalKills || 0}`;
+  el.innerHTML = `BEST · <span style="color:var(--accent-gold);">${cur.bestScore.toLocaleString()}</span> · WAVE ${cur.bestWave}/${WAVES.length} · TOTAL KILLS ${cur.totalKills || 0}`;
   const left = document.getElementById('menuFeatures');
   if (left) left.parentNode.appendChild(el);
 }

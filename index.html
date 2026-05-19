@@ -382,35 +382,64 @@ html, body {
   font-weight: 700; margin-top: 8px;
 }
 
-/* Joysticks */
-.joystick {
-  position: absolute; bottom: max(40px, env(safe-area-inset-bottom));
-  width: 130px; height: 130px;
+/* Touch zones (invisible — left/right halves capture finger) */
+.touchZone {
+  position: absolute; top: 0; bottom: 0; width: 50%;
   pointer-events: auto;
+  z-index: 11;
 }
-#joyMove { left: 28px; }
-#joyAim  { right: 28px; }
+#moveZone { left: 0; }
+#aimZone  { right: 0; }
+
+/* Dynamic joysticks — appear at finger touch position */
+.joystick {
+  position: absolute;
+  width: 140px; height: 140px;
+  margin: -70px 0 0 -70px;     /* center on (left, top) */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 12;
+}
+.joystick.active { opacity: 1; }
 .joyBase {
   position: absolute; inset: 0;
   border-radius: 50%;
-  background: rgba(15, 6, 24, 0.42);
-  border: 2px solid rgba(255,255,255,0.18);
+  background: rgba(15, 6, 24, 0.4);
+  border: 2px solid rgba(255,255,255,0.2);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 .joyKnob {
   position: absolute; left: 50%; top: 50%;
-  width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  width: 56px; height: 56px; margin: -28px 0 0 -28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.25), rgba(255,90,40,0.55));
-  border: 2px solid rgba(255,255,255,0.6);
-  box-shadow: 0 0 20px rgba(255,90,40,0.4), 0 6px 12px rgba(0,0,0,0.5);
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.32), rgba(255,90,40,0.65));
+  border: 2px solid rgba(255,255,255,0.7);
+  box-shadow: 0 0 22px rgba(255,90,40,0.5), 0 6px 12px rgba(0,0,0,0.5);
   transform: translate(0, 0);
-  transition: background 0.15s;
 }
 #joyAim .joyKnob {
-  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.25), rgba(74,158,255,0.6));
-  box-shadow: 0 0 20px rgba(74,158,255,0.45), 0 6px 12px rgba(0,0,0,0.5);
+  background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.32), rgba(74,158,255,0.7));
+  box-shadow: 0 0 22px rgba(74,158,255,0.55), 0 6px 12px rgba(0,0,0,0.5);
 }
+/* Subtle "tap-hint" indicator at bottom corners when joystick not active */
+.touchHint {
+  position: absolute; bottom: max(34px, env(safe-area-inset-bottom));
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255,255,255,0.12);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.5;
+  animation: tapHint 2.4s ease-in-out infinite;
+}
+#moveHint { left: 42px; }
+#aimHint  { right: 42px; border-color: rgba(74,158,255,0.18); }
+@keyframes tapHint {
+  0%, 100% { transform: scale(1); opacity: 0.32; }
+  50%      { transform: scale(1.12); opacity: 0.55; }
+}
+.touchHint.gone { opacity: 0; }
 
 /* Super button (center-bottom) */
 #superBtn {
@@ -787,8 +816,8 @@ html, body {
     <div id="menuLeft">
       <div id="menuKicker">CO-OP ZOMBIE DEFENSE</div>
       <h1 id="menuTitle">DEAD CORRIDOR</h1>
-      <div id="menuSub">10 WAVES · 5 ZOMBIES · 2 PLAYERS</div>
-      <p id="menuTagline">두 명이 등 맞대고 10웨이브를 막아내세요. 픽업을 모아 인벤토리에 넣고, 슈퍼 게이지를 채워 발동하세요.</p>
+      <div id="menuSub">3 WAVES · 5 ZOMBIES · 2 PLAYERS</div>
+      <p id="menuTagline">짧고 강렬한 3 웨이브 — 지하철 → 폐병동 → 최종 항전. 픽업을 모아 인벤토리에 넣고, 슈퍼 게이지를 채워 발동하세요.</p>
       <div id="menuFeatures">
         <div><span class="bullet"></span><span>슈퍼 능력 · 인벤토리 · 5종 적</span></div>
         <div><span class="bullet"></span><span>웨이브별 이벤트 · 보스 메카닉</span></div>
@@ -830,7 +859,7 @@ html, body {
       </div>
       <div class="hudPill wave" id="waveBox">
         <span>WAVE</span>
-        <span><span class="num" id="waveNum">1</span><span class="total" id="waveTotal"> / 10</span></span>
+        <span><span class="num" id="waveNum">1</span><span class="total" id="waveTotal"> / 3</span></span>
         <span style="margin-left:8px;opacity:0.7;font-weight:600;" id="waveStatus">REMAIN 0</span>
       </div>
       <div id="topbarRight">
@@ -857,6 +886,10 @@ html, body {
     </div>
     <button id="superBtn"><span>SUPER</span></button>
 
+    <div class="touchZone" id="moveZone"></div>
+    <div class="touchZone" id="aimZone"></div>
+    <div class="touchHint" id="moveHint"></div>
+    <div class="touchHint" id="aimHint"></div>
     <div class="joystick" id="joyMove"><div class="joyBase"></div><div class="joyKnob"></div></div>
     <div class="joystick" id="joyAim"><div class="joyBase"></div><div class="joyKnob"></div></div>
 
