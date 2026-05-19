@@ -2147,16 +2147,16 @@ function ensureAudio() {
   try {
     actx = new (window.AudioContext || window.webkitAudioContext)();
   } catch { return; }
-  audio.shot = () => playShot();
-  audio.hit = () => playHit();
-  audio.kill = () => playKill();
-  audio.boom = () => playBoom();
-  audio.super = () => playSuper();
-  audio.pickup = () => playPickup();
-  audio.wave = () => playWave();
-  audio.win = () => playWin();
-  audio.lose = () => playLose();
-  audio.dmg = () => playDmg();
+  audio.shot   = () => { if (settings.sfx) playShot(); };
+  audio.hit    = () => { if (settings.sfx) playHit(); };
+  audio.kill   = () => { if (settings.sfx) playKill(); };
+  audio.boom   = () => { if (settings.sfx) playBoom(); };
+  audio.super  = () => { if (settings.sfx) playSuper(); };
+  audio.pickup = () => { if (settings.sfx) playPickup(); };
+  audio.wave   = () => { if (settings.sfx) playWave(); };
+  audio.win    = () => { if (settings.sfx) playWin(); };
+  audio.lose   = () => { if (settings.sfx) playLose(); };
+  audio.dmg    = () => { if (settings.sfx) playDmg(); };
 }
 function tone(freq, dur, type = 'sine', vol = 0.18, when = 0) {
   if (!actx) return;
@@ -2244,6 +2244,7 @@ let musicGain = null;
 let musicOsc1 = null, musicOsc2 = null, musicLfo = null;
 let musicBeatHandle = null;
 function startMusic() {
+  if (!settings.music) return;
   if (!actx || musicGain) return;
   musicGain = actx.createGain();
   musicGain.gain.value = 0.038;
@@ -2310,8 +2311,13 @@ function stopMusic() {
   musicGain = null;
 }
 
+// ─── Settings (localStorage) ──────────────────────────────────
+const settings = { music: true, sfx: true, vibrate: true };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('dc_settings') || '{}')); } catch {}
+function saveSettings() { try { localStorage.setItem('dc_settings', JSON.stringify(settings)); } catch {} }
+
 // ─── Haptic vibration helper ──────────────────────────────────
-function vib(ms) { try { navigator.vibrate?.(ms); } catch {} }
+function vib(ms) { if (settings.vibrate) try { navigator.vibrate?.(ms); } catch {} }
 
 // ─── Best score persistence ───────────────────────────────────
 const STORE_KEY = 'dc_best_v1';
@@ -2404,17 +2410,19 @@ let prevT = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - prevT) / 1000);
   prevT = now;
-  if (G.phase === 'play' || G.phase === 'rest') {
+  if (G.phase === 'menu') {
+    tickHeroScene(dt);
+  } else if (!paused && (G.phase === 'play' || G.phase === 'rest' || G.phase === 'shop')) {
     G.t += dt;
     gatherLocalInput();
-    if (amAuthoritative()) {
+    if (G.phase !== 'shop' && amAuthoritative()) {
       updatePlayers(dt);
       updateZombies(dt);
       updateBullets(dt);
       updateBulletsVsPlayers();
       updateParticles(dt);
       updateWave(dt);
-    } else {
+    } else if (G.phase !== 'shop') {
       // Peer: visual-only bullet movement + particles
       updateBullets(dt);
       updateParticles(dt);
@@ -2428,13 +2436,142 @@ function loop(now) {
     }
     syncPlayerMeshes(dt);
     syncPickupMeshes(dt);
-    updateCamera(dt);
+    if (G.phase !== 'shop') updateCamera(dt);
     updateHUD(dt);
+  } else if (paused) {
+    // While paused: still send heartbeat network state so peer doesn't desync hard
+    if (G.isCoop && connected && (now - netLastSend) > 1000 / NET_HZ_NUM) {
+      if (isHost) netSendState(); else netSendInput();
+      netLastSend = now;
+    }
   }
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// ============================================================
+// PAUSE + SETTINGS UI
+// ============================================================
+const pauseBtnEl = $('pauseBtn');
+const pauseModalEl = $('pauseModal');
+const btnResume = $('btnResume');
+const btnToggleMusic = $('btnToggleMusic');
+const btnToggleSfx = $('btnToggleSfx');
+const btnToggleVib = $('btnToggleVib');
+const btnQuit = $('btnQuit');
+let paused = false;
+
+function syncToggles() {
+  const upd = (el, label, on) => {
+    if (!el) return;
+    el.textContent = `${label} : ${on ? 'ON' : 'OFF'}`;
+    el.classList.toggle('off', !on);
+  };
+  upd(btnToggleMusic, '🎵 음악', settings.music);
+  upd(btnToggleSfx,   '🔊 효과음', settings.sfx);
+  upd(btnToggleVib,   '📳 진동',  settings.vibrate);
+}
+function openPause() {
+  if (G.phase !== 'play' && G.phase !== 'rest' && G.phase !== 'shop') return;
+  paused = true;
+  const stats = `WAVE ${G.wave}/${WAVES.length} · SCORE ${G.score.toLocaleString()} · KILLS ${G.kills}`;
+  $('pauseStats').textContent = stats;
+  syncToggles();
+  pauseModalEl.classList.remove('hidden');
+}
+function closePause() {
+  paused = false;
+  pauseModalEl.classList.add('hidden');
+}
+pauseBtnEl.addEventListener('click', openPause);
+btnResume.addEventListener('click', closePause);
+btnToggleMusic.addEventListener('click', () => {
+  settings.music = !settings.music; saveSettings();
+  if (settings.music) startMusic(); else stopMusic();
+  syncToggles();
+});
+btnToggleSfx.addEventListener('click', () => {
+  settings.sfx = !settings.sfx; saveSettings(); syncToggles();
+});
+btnToggleVib.addEventListener('click', () => {
+  settings.vibrate = !settings.vibrate; saveSettings(); syncToggles();
+  if (settings.vibrate) navigator.vibrate?.(20);
+});
+btnQuit.addEventListener('click', () => {
+  stopMusic();
+  saveBest();
+  location.reload();
+});
+
+// Modify main loop to respect paused — patch via wrapping requestAnimationFrame.
+// (Implemented by adding `paused` check inside the existing loop body.)
+const _origLoop = loop;
+// (loop already references runs render; we'll guard updates by reading `paused` flag.)
+
+// ============================================================
+// MENU HERO SCENE — animate lobby characters during menu
+// ============================================================
+let heroPlayer = null;
+let heroZombies = [];
+function setupHeroScene() {
+  heroPlayer = createPlayerMesh(0);
+  heroPlayer.g.position.set(2, 0, 2);
+  heroPlayer.g.rotation.y = Math.PI * 1.2;
+  scene.add(heroPlayer.g);
+  const types = ['walker', 'runner', 'brute', 'spitter'];
+  for (let i = 0; i < 4; i++) {
+    const m = createZombieMesh(types[i]);
+    const ang = Math.PI * 2 * (i / 4) + 0.3;
+    const r = 8 + Math.random() * 2;
+    m.g.position.set(Math.sin(ang) * r, 0, Math.cos(ang) * r + 2);
+    m.g.rotation.y = ang + Math.PI;
+    scene.add(m.g);
+    heroZombies.push({ m, ang, r, t: Math.random() * 5, type: types[i] });
+  }
+  // Position camera for menu view (slightly different angle)
+  camera.position.set(0, 28, 22);
+  camera.lookAt(2, 0, 2);
+}
+function tickHeroScene(dt) {
+  if (!heroPlayer) return;
+  // Player slow rotate + idle bob
+  heroPlayer.g.rotation.y += dt * 0.18;
+  const t = performance.now() / 1000;
+  heroPlayer.g.position.y = Math.abs(Math.sin(t * 2.4)) * 0.04;
+  const swing = Math.sin(t * 2.0) * 0.06;
+  heroPlayer.legL.rotation.x = swing;
+  heroPlayer.legR.rotation.x = -swing;
+  // Zombies orbit/shamble
+  for (const z of heroZombies) {
+    z.t += dt;
+    z.ang += dt * 0.08;
+    const r = z.r + Math.sin(z.t * 0.5) * 0.4;
+    z.m.g.position.x = Math.sin(z.ang) * r;
+    z.m.g.position.z = Math.cos(z.ang) * r + 2;
+    z.m.g.position.y = Math.sin(z.t * 4) * 0.04 * ZTYPE[z.type].sz;
+    z.m.g.rotation.y = z.ang + Math.PI;
+    const ls = Math.sin(z.t * 4) * 0.18;
+    z.m.legL.rotation.x = ls;
+    z.m.legR.rotation.x = -ls;
+    const asw = Math.sin(z.t * 2) * 0.1;
+    z.m.armL.rotation.z = 0.22 + asw;
+    z.m.armR.rotation.z = -0.22 - asw;
+  }
+}
+function teardownHeroScene() {
+  if (heroPlayer) { scene.remove(heroPlayer.g); heroPlayer = null; }
+  for (const z of heroZombies) scene.remove(z.m.g);
+  heroZombies = [];
+}
+setupHeroScene();
+
+// Hook into startGame to remove hero scene
+const _origStartGame = startGame;
+startGame = function (coop, isPeerJoin) {
+  teardownHeroScene();
+  _origStartGame(coop, isPeerJoin);
+};
 
 // ============================================================
 // SERVICE WORKER

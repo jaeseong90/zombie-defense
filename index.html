@@ -60,9 +60,9 @@ html, body {
   padding: 28px;
   gap: clamp(28px, 6vw, 80px);
   background:
-    radial-gradient(ellipse at 25% 30%, rgba(180, 30, 60, 0.22) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(60, 20, 140, 0.22) 0%, transparent 55%),
-    var(--bg-0);
+    radial-gradient(ellipse at 25% 30%, rgba(180, 30, 60, 0.30) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(60, 20, 140, 0.30) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(10, 5, 16, 0.84) 0%, rgba(10, 5, 16, 0.96) 100%);
 }
 #menuBg, #menuBgScene {
   position: absolute; inset: 0; pointer-events: none; z-index: -1;
@@ -662,6 +662,83 @@ html, body {
   #shopTimer .num { font-size: 12px; }
 }
 
+/* Pause button (top-right HUD corner) */
+#pauseBtn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(10, 4, 18, 0.7);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: white;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; pointer-events: auto;
+  z-index: 14;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.08s, background 0.18s;
+}
+#pauseBtn:active { transform: scale(0.92); }
+#pauseBtn:hover { background: rgba(255,90,40,0.4); }
+@media (orientation: landscape) and (max-height: 540px) {
+  #pauseBtn { width: 34px; height: 34px; font-size: 13px; top: 8px; right: 10px; }
+}
+
+#pauseModal {
+  position: absolute; inset: 0; z-index: 22;
+  background: rgba(5, 2, 12, 0.85);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto;
+}
+#pauseInner {
+  background: linear-gradient(180deg, rgba(30, 12, 40, 0.95), rgba(10, 5, 16, 0.95));
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 32px 36px;
+  display: flex; flex-direction: column; gap: 16px;
+  min-width: 280px; max-width: 92vw;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  animation: pauseIn 0.25s ease-out;
+}
+@keyframes pauseIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+#pauseTitle {
+  font-size: 32px; font-weight: 900;
+  letter-spacing: 0.18em;
+  background: linear-gradient(180deg, #fff0c4 0%, #ff8b3a 60%, #b8281f 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  text-align: center;
+}
+#pauseStats {
+  font-size: 11px; letter-spacing: 0.18em; color: var(--text-dim);
+  font-weight: 700; text-transform: uppercase;
+  text-align: center; line-height: 1.6;
+}
+#pauseActions {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 6px;
+}
+.pauseBtn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: white; cursor: pointer;
+  padding: 13px 18px; border-radius: 10px;
+  font-weight: 800; font-size: 13px; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: background 0.18s, border-color 0.2s, transform 0.08s;
+}
+.pauseBtn:active { transform: scale(0.97); }
+.pauseBtn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.28); }
+.pauseBtn.primary {
+  background: linear-gradient(135deg, #d33a2a 0%, #ff7235 100%);
+  border-color: rgba(255, 160, 110, 0.6);
+  box-shadow: 0 4px 16px rgba(255,90,40,0.28);
+}
+.pauseBtn.warn { color: var(--accent-gold); border-color: rgba(255,183,77,0.36); }
+.pauseBtn.off { opacity: 0.55; }
+
 /* Damage flash + low HP vignette */
 #dmgFlash {
   position: absolute; inset: 0; z-index: 19;
@@ -774,6 +851,21 @@ html, body {
 
     <div id="dmgFlash"></div>
     <div id="lowHp"></div>
+    <button id="pauseBtn" aria-label="Pause">⏸</button>
+  </div>
+
+  <div id="pauseModal" class="hidden">
+    <div id="pauseInner">
+      <div id="pauseTitle">PAUSED</div>
+      <div id="pauseStats"></div>
+      <div id="pauseActions">
+        <button class="pauseBtn primary" id="btnResume">▶ 다시 시작</button>
+        <button class="pauseBtn" id="btnToggleMusic">🎵 음악 : ON</button>
+        <button class="pauseBtn" id="btnToggleSfx">🔊 효과음 : ON</button>
+        <button class="pauseBtn" id="btnToggleVib">📳 진동 : ON</button>
+        <button class="pauseBtn warn" id="btnQuit">🚪 메인 메뉴</button>
+      </div>
+    </div>
   </div>
 
   <div id="rotateWarn">
