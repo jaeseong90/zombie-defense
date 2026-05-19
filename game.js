@@ -459,7 +459,15 @@ function createPlayerMesh(idx) {
     new THREE.MeshBasicMaterial({ color: 0x4a9eff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   shieldBubble.position.y = 0.9; g.add(shieldBubble);
 
-  return { g, rifle, flash, flashCore, legL: lL, legR: lR, aura, shieldBubble, head, armL: aL, armR: aR };
+  // Aim indicator (thin line on ground toward aim direction)
+  const aimGeo = new THREE.PlaneGeometry(0.18, 5);
+  const aimMat = new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const aimLine = new THREE.Mesh(aimGeo, aimMat);
+  aimLine.rotation.x = -Math.PI / 2;
+  aimLine.position.set(0, 0.03, -2.5);
+  g.add(aimLine);
+
+  return { g, rifle, flash, flashCore, legL: lL, legR: lR, aura, shieldBubble, head, armL: aL, armR: aR, aimLine };
 }
 
 // ─── ZOMBIE MESH ─────────────────────────────────────────────
@@ -565,6 +573,10 @@ function createZombieMesh(type) {
       pad.position.set(sx*s, 1.15*s, -0.04*s); g.add(pad);
     }
   }
+  // HP bar billboard for bosses (brute)
+  let hpBar = null;
+  if (type === 'brute') hpBar = createBossHpBar(s);
+  if (hpBar) g.add(hpBar.sprite);
   if (type === 'runner') {
     for (const sx of [-0.28, 0.28]) {
       const sinew = new THREE.Mesh(new THREE.BoxGeometry(0.03*s, 0.4*s, 0.04*s),
@@ -572,7 +584,44 @@ function createZombieMesh(type) {
       sinew.position.set(sx*s, 0.88*s, 0.3*s); g.add(sinew);
     }
   }
-  return { g, legL: lL, legR: lR, armL: aL, armR: aR, head, bomb };
+  return { g, legL: lL, legR: lR, armL: aL, armR: aR, head, bomb, hpBar };
+}
+function createBossHpBar(s) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 20;
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.6 * s, 0.45 * s, 1);
+  sprite.position.y = 4.4 * s;
+  drawBossHpBar(ctx, 1.0);
+  return { sprite, canvas, ctx, tex };
+}
+function drawBossHpBar(ctx, ratio) {
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(20, 6, 14, 0.86)';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(255, 90, 60, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(0.75, 0.75, w - 1.5, h - 1.5);
+  const fillW = (w - 5) * Math.max(0, ratio);
+  const grd = ctx.createLinearGradient(0, 0, w, 0);
+  grd.addColorStop(0, '#ff3a4a');
+  grd.addColorStop(0.55, '#ff7a3a');
+  grd.addColorStop(1, '#ffc060');
+  ctx.fillStyle = grd;
+  ctx.fillRect(2.5, 2.5, fillW, h - 5);
+  // Hex lines (texture)
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  for (let i = 8; i < fillW; i += 12) {
+    ctx.beginPath();
+    ctx.moveTo(2.5 + i, 2.5);
+    ctx.lineTo(2.5 + i, h - 2.5);
+    ctx.stroke();
+  }
 }
 
 // ─── PICKUP MESH ─────────────────────────────────────────────
@@ -1150,6 +1199,24 @@ function updateZombies(dt) {
     z.lungeT = Math.max(0, z.lungeT - dt * 4);
     if (!z.alive) {
       z.deathT += dt;
+      const k = Math.min(1, z.deathT / 0.7);
+      if (z.deathTilt == null) z.deathTilt = (Math.random() - 0.5) * 0.6;
+      z.mesh.g.rotation.x = k * (Math.PI / 2.2);
+      z.mesh.g.rotation.z = k * z.deathTilt;
+      z.mesh.g.position.y = -k * 0.25;
+      z.mesh.g.scale.setScalar(1 - k * 0.18);
+      // Fade body materials (but skip outlines — they're already inside)
+      if (!z.fadedOnce) {
+        z.fadedOnce = true;
+        z.mesh.g.traverse((o) => {
+          if (o.material) {
+            o.material.transparent = true;
+          }
+        });
+      }
+      z.mesh.g.traverse((o) => {
+        if (o.material && o.material.transparent) o.material.opacity = Math.max(0, 1 - k);
+      });
       if (z.deathT > 1.5) {
         scene.remove(z.mesh.g);
         G.zombies.splice(i, 1);
@@ -1264,6 +1331,15 @@ function updateZombies(dt) {
     }
     if (z.type === 'spitter' && z.mesh.bomb) {
       z.mesh.bomb.scale.setScalar(0.7 + z.lungeT * 0.6);
+    }
+    // Boss HP bar update
+    if (z.mesh.hpBar) {
+      const ratio = Math.max(0, z.hp / z.hpMax);
+      if (z._lastHpR == null || Math.abs(z._lastHpR - ratio) > 0.008) {
+        drawBossHpBar(z.mesh.hpBar.ctx, ratio);
+        z.mesh.hpBar.tex.needsUpdate = true;
+        z._lastHpR = ratio;
+      }
     }
   }
 
@@ -1426,6 +1502,12 @@ function syncPlayerMeshes(dt) {
     pm.aura.scale.setScalar(1 + Math.sin(G.t * 4) * 0.08);
     // Shield bubble
     pm.shieldBubble.material.opacity = p.shieldT > 0 ? (0.25 + Math.sin(G.t * 8) * 0.05) : 0;
+    // Aim line
+    if (pm.aimLine) {
+      const aLen = Math.hypot(p.input?.aimX || 0, p.input?.aimY || 0);
+      const target = aLen > 0.18 ? 0.42 + Math.sin(G.t * 7) * 0.08 : 0;
+      pm.aimLine.material.opacity += (target - pm.aimLine.material.opacity) * 0.18;
+    }
   }
 }
 
