@@ -629,6 +629,8 @@ const G = {
   myIdx: 0,
   isCoop: false,
   introShownFor: -1,
+  shopCards: [], shopBought: [], shopTimeLeft: 0,
+  event: null, zSpdMult: 1, spawnIntMult: 1, dropMult: 1,
 };
 
 function makePlayer(idx) {
@@ -1491,7 +1493,30 @@ const UPGRADES = [
   { id: 'shield', icon: '🛡', name: 'WAVE SHIELD',     desc: '매 웨이브 시작 3초 삟드', apply: (p) => { p.startShield = (p.startShield || 0) + 3; } },
 ];
 let shopTimerHandle = null;
-function showShop() {
+// Initiate a new shop session (host or solo). Stores cards in G.shopCards.
+function startShop() {
+  const pool = UPGRADES.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  G.shopCards = pool.slice(0, 3).map(u => u.id);
+  G.shopBought = [];
+  G.shopTimeLeft = 8;
+  G.phase = 'shop';
+  pendingEvents.push({ t: 'shopopen', cards: G.shopCards.slice() });
+  renderShop();
+  if (!G.isCoop || isHost) {
+    // Authoritative: start timer
+    shopTimerHandle = setInterval(() => {
+      G.shopTimeLeft -= 1;
+      const n = document.getElementById('shopTimerN');
+      if (n) n.textContent = G.shopTimeLeft;
+      if (G.shopTimeLeft <= 0 || G.shopBought.length >= G.shopCards.length) closeShop();
+    }, 1000);
+  }
+}
+function renderShop() {
   const old = document.getElementById('shop');
   if (old) old.remove();
   const el = document.createElement('div');
@@ -1499,56 +1524,88 @@ function showShop() {
   el.innerHTML = `
     <div id="shopHeader">
       <div id="shopTitle">업그레이드</div>
-      <div id="shopSub">웨이브 ${G.wave + 1} 준비 — 하나 선택</div>
+      <div id="shopSub">${G.isCoop ? '두 명 모두에게 적용 · 1장 선택' : `웨이브 ${G.wave + 1} 준비 — 하나 선택`}</div>
     </div>
     <div id="shopCards"></div>
     <div id="shopFooter">
       <button id="shopSkip">SKIP</button>
-      <div id="shopTimer"><span class="num" id="shopTimerN">8</span> s</div>
+      <div id="shopTimer"><span class="num" id="shopTimerN">${G.shopTimeLeft}</span> s</div>
     </div>
   `;
   document.body.appendChild(el);
-  // Pick 3 random unique upgrades
-  const pool = UPGRADES.slice();
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
   const cardsEl = document.getElementById('shopCards');
-  for (const u of pool.slice(0, 3)) {
+  G.shopCards.forEach((id, i) => {
+    const u = UPGRADES.find(x => x.id === id);
+    if (!u) return;
     const c = document.createElement('div');
-    c.className = 'shopCard';
+    c.className = 'shopCard' + (G.shopBought.includes(i) ? ' bought' : '');
+    c.dataset.i = i;
     c.innerHTML = `
       <div class="shopCardIcon">${u.icon}</div>
       <div class="shopCardName">${u.name}</div>
       <div class="shopCardDesc">${u.desc}</div>
     `;
-    c.addEventListener('click', () => buyUpgrade(u.id));
+    c.addEventListener('click', () => requestBuy(i));
     cardsEl.appendChild(c);
-  }
-  document.getElementById('shopSkip').addEventListener('click', () => closeShop());
-  let t = 8;
-  shopTimerHandle = setInterval(() => {
-    t--;
-    const n = document.getElementById('shopTimerN');
-    if (n) n.textContent = t;
-    if (t <= 0) closeShop();
-  }, 1000);
+  });
+  document.getElementById('shopSkip').addEventListener('click', () => requestSkip());
 }
-function buyUpgrade(id) {
+function refreshShopCards() {
+  const cardsEl = document.getElementById('shopCards');
+  if (!cardsEl) return;
+  cardsEl.querySelectorAll('.shopCard').forEach(el => {
+    const i = +el.dataset.i;
+    el.classList.toggle('bought', G.shopBought.includes(i));
+  });
+}
+function requestBuy(i) {
+  if (G.shopBought.includes(i)) return;
+  if (G.isCoop && !isHost) {
+    const me = G.players[G.myIdx];
+    if (me) me.pendingShopBuy = i;
+    ensureAudio(); audio.pickup?.();
+  } else {
+    applyShopBuy(i);
+  }
+}
+function requestSkip() {
+  if (G.isCoop && !isHost) {
+    const me = G.players[G.myIdx];
+    if (me) me.pendingShopSkip = true;
+  } else {
+    closeShop();
+  }
+}
+function applyShopBuy(i) {
+  if (G.shopBought.includes(i)) return;
+  const id = G.shopCards[i];
   const u = UPGRADES.find(x => x.id === id);
   if (!u) return;
   for (const p of G.players) { u.apply(p); p.upgrades.push(id); }
+  G.shopBought.push(i);
   ensureAudio(); audio.pickup?.();
-  closeShop();
+  vib(20);
+  refreshShopCards();
+  pendingEvents.push({ t: 'shopbuy', i });
+  // Close once a card is picked (shared upgrade)
+  setTimeout(() => closeShop(), 400);
 }
 function closeShop() {
   if (shopTimerHandle) { clearInterval(shopTimerHandle); shopTimerHandle = null; }
   const el = document.getElementById('shop');
   if (el) el.remove();
+  G.shopCards = [];
+  G.shopBought = [];
   G.phase = 'play';
-  startWave(G.wave);
+  pendingEvents.push({ t: 'shopclose' });
+  if (!G.isCoop || isHost) startWave(G.wave);
 }
+// Backward-compatible names (older callers)
+const showShop = startShop;
+const buyUpgrade = (id) => {
+  const i = G.shopCards.indexOf(id);
+  if (i >= 0) applyShopBuy(i);
+};
 
 function startWave(idx) {
   G.wave = idx + 1;
@@ -1614,14 +1671,9 @@ function updateWave(dt) {
       const best = saveBest();
       stopMusic();
       showBanner('🏆 VICTORY', `SCORE ${G.score.toLocaleString()} · BEST ${best.bestScore.toLocaleString()}`, '메인 메뉴');
-    } else if (G.isCoop) {
-      // Coop: just rest (shop is solo-only for now)
-      G.phase = 'rest';
-      setTimeout(() => { if (G.phase === 'rest') { G.phase = 'play'; startWave(G.wave); } }, REST_TIME * 1000);
     } else {
-      // Solo: pick an upgrade
-      G.phase = 'shop';
-      showShop();
+      // Both solo & coop: shop between waves
+      startShop();
     }
   }
 }
@@ -1820,16 +1872,40 @@ function netSend(m) { if (conn && connected) try { conn.send(m); } catch {} }
 function handleNetMsg(m) {
   if (!m || !m.t) return;
   if (m.t === 'state' && !isHost) applyNetState(m);
-  else if (m.t === 'input' && isHost) Object.assign(peerInput, m);
+  else if (m.t === 'input' && isHost) {
+    Object.assign(peerInput, m);
+    if (m.shopBuy != null && m.shopBuy >= 0) applyShopBuy(m.shopBuy);
+    if (m.shopSkip) closeShop();
+  }
   else if (m.t === 'event') applyEvent(m.e);
 }
 
 function applyNetState(m) {
+  const prevPhase = G.phase;
   G.phase = m.ph;
   G.wave = m.wv;
   G.score = m.sc;
   G.kills = m.kl;
   G.toSpawnList.length = m.ts || 0; // for HUD remain counter
+  // Shop sync
+  if (m.ph === 'shop' && m.sh) {
+    const newCards = m.sh.c || [];
+    const cardsChanged = (G.shopCards || []).join(',') !== newCards.join(',');
+    G.shopCards = newCards;
+    G.shopBought = m.sh.b || [];
+    G.shopTimeLeft = m.sh.tl || 0;
+    if (cardsChanged || !document.getElementById('shop')) {
+      renderShop();
+    } else {
+      refreshShopCards();
+      const n = document.getElementById('shopTimerN');
+      if (n) n.textContent = G.shopTimeLeft;
+    }
+  } else if (prevPhase === 'shop' && m.ph !== 'shop') {
+    const el = document.getElementById('shop');
+    if (el) el.remove();
+    G.shopCards = []; G.shopBought = [];
+  }
   // Players
   for (let i = 0; i < 2; i++) {
     const sp = m.ps?.[i]; const p = G.players[i];
@@ -1957,7 +2033,8 @@ function netSendState() {
   }));
   const pksd = G.pickups.map(p => ({ id: p.id, t: p.type, x: p.x, z: p.z }));
   const evs = pendingEvents.splice(0);
-  netSend({ t: 'state', ph: G.phase, wv: G.wave, sc: G.score, kl: G.kills, ts: G.toSpawnList.length, ps: psd, zs: zsd, pks: pksd, evs });
+  const shopData = G.phase === 'shop' ? { c: G.shopCards, b: G.shopBought, tl: G.shopTimeLeft } : null;
+  netSend({ t: 'state', ph: G.phase, wv: G.wave, sc: G.score, kl: G.kills, ts: G.toSpawnList.length, ps: psd, zs: zsd, pks: pksd, evs, sh: shopData });
 }
 
 function netSendInput() {
@@ -1971,10 +2048,14 @@ function netSendInput() {
     aimX: inp.aimX || 0, aimY: inp.aimY || 0, aimLen: inp.aimLen || 0,
     useSlot: me.pendingUseSlot ?? -1,
     useSuper: me.pendingUseSuper ?? false,
+    shopBuy: me.pendingShopBuy ?? -1,
+    shopSkip: me.pendingShopSkip ? 1 : 0,
   };
   netSend(msg);
   me.pendingUseSlot = -1;
   me.pendingUseSuper = false;
+  me.pendingShopBuy = -1;
+  me.pendingShopSkip = false;
 }
 
 // Override input gathering to support peer input on host side

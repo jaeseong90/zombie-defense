@@ -590,6 +590,21 @@ html, body {
   box-shadow: 0 12px 32px rgba(255,183,77,0.35), inset 0 0 30px rgba(255,183,77,0.08);
 }
 .shopCard:active { transform: translateY(-2px) scale(0.98); }
+.shopCard.bought {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: grayscale(0.6);
+  border-color: rgba(255,255,255,0.06);
+  transform: translateY(0) scale(0.97);
+}
+.shopCard.bought::after {
+  content: '✓ TAKEN';
+  position: absolute; top: 8px; right: 8px;
+  font-size: 9px; font-weight: 900; letter-spacing: 0.1em;
+  color: var(--accent-green);
+  background: rgba(0,0,0,0.4);
+  padding: 3px 7px; border-radius: 4px;
+}
 .shopCardIcon {
   font-size: 48px; margin: 6px 0;
   filter: drop-shadow(0 0 12px rgba(255,200,80,0.6));
