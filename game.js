@@ -11,7 +11,7 @@ import {
   ZTYPE, PICKUP, WAVES, UPGRADES, comboMultiplier,
 } from './src/data.js';
 import { settings, vib, loadBest, saveBest as _saveBest, saveSettings } from './src/settings.js';
-import { audio, ensureAudio, startMusic, stopMusic } from './src/audio.js';
+import { audio, ensureAudio, startMusic, stopMusic, setMusicTone } from './src/audio.js';
 import { THEMES } from './src/themes.js';
 
 // ─── Detect mobile ───────────────────────────────────────────
@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's20-intro';
+const BUILD = 's21-detail';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -176,6 +176,8 @@ function applyTheme(name) {
   scene.background.setHex(theme.bgColor);
   scene.fog.color.setHex(theme.fogColor);
   scene.fog.density = theme.fogDensity;
+  // Music tone (re-tunes the bass drone if music is playing)
+  if (theme.musicRoot) setMusicTone(theme.musicRoot, theme.musicFifth);
   // Lighting
   ambient.color.setHex(theme.ambient);
   keyLight.color.setHex(theme.keyColor);
@@ -284,12 +286,32 @@ function createPlayerMesh(idx) {
   bL.position.set(-0.2, 0.11, 0.06); bL.castShadow = !IS_MOBILE; lower.add(bL);
   const bR = outlined(new THREE.Mesh(bootGeo, boot), 1.07);
   bR.position.set( 0.2, 0.11, 0.06); bR.castShadow = !IS_MOBILE; lower.add(bR);
+  // Boot toe caps (metallic accent)
+  const toeCapMat = tmat(0x3c3e4a, { metalness: 0.4 });
+  for (const dx of [-0.2, 0.2]) {
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.18), toeCapMat);
+    cap.position.set(dx, 0.06, -0.14); lower.add(cap);
+  }
   // Legs — lower
   const legGeo = new THREE.CylinderGeometry(0.18, 0.16, 0.45, 10);
   const lL = outlined(new THREE.Mesh(legGeo, pants), 1.07);
   lL.position.set(-0.2, 0.42, 0); lL.castShadow = !IS_MOBILE; lower.add(lL);
   const lR = outlined(new THREE.Mesh(legGeo, pants), 1.07);
   lR.position.set( 0.2, 0.42, 0); lR.castShadow = !IS_MOBILE; lower.add(lR);
+  // Knee pads (rounded armor)
+  const kneePadMat = tmat(0x14161e, { metalness: 0.3 });
+  for (const dx of [-0.2, 0.2]) {
+    const knee = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8, 0, Math.PI*2, 0, Math.PI/2), kneePadMat), 1.06);
+    knee.position.set(dx, 0.46, -0.08); knee.rotation.x = -Math.PI/2;
+    lower.add(knee);
+  }
+  // Thigh straps (cosmetic detail on each leg)
+  const thighStrapMat = tmat(0x070809);
+  for (const dx of [-0.2, 0.2]) {
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.025, 4, 16), thighStrapMat);
+    strap.position.set(dx, 0.62, 0); strap.rotation.x = Math.PI/2;
+    lower.add(strap);
+  }
   // Torso
   const tor = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.6, 0.48), vest), 1.05);
   tor.position.set(0, 0.92, 0); tor.castShadow = !IS_MOBILE; upper.add(tor);
@@ -302,6 +324,22 @@ function createPlayerMesh(idx) {
   // Belt
   const belt = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.08, 0.5), tmat(0x111319));
   belt.position.set(0, 0.66, 0); upper.add(belt); outlined(belt, 1.04);
+  // Belt buckle (centered)
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.02), tmat(accentDeep, { emissive: accentDeep, emissiveIntensity: 0.3 }));
+  buckle.position.set(0, 0.66, 0.26); upper.add(buckle);
+  // Belt pouches (small boxes on belt sides)
+  const pouchMat = tmat(0x1a1c24);
+  for (const offset of [-0.30, -0.15, 0.15, 0.30]) {
+    const pouch = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.10), pouchMat), 1.04);
+    pouch.position.set(offset, 0.58, 0.22); upper.add(pouch);
+  }
+  // Forearm armor plates
+  const armorPlateMat = tmat(0x14161e, { metalness: 0.3 });
+  for (const dx of [-0.46, 0.46]) {
+    const fplate = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.32, 0.06), armorPlateMat), 1.05);
+    fplate.position.set(dx, 0.83, -0.31); fplate.rotation.x = -0.7;
+    upper.add(fplate);
+  }
   // Backpack
   const backpack = outlined(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.24), tmat(0x222a36)), 1.05);
   backpack.position.set(0, 1.04, 0.34); upper.add(backpack);

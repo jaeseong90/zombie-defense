@@ -130,6 +130,14 @@ export function startMusic() {
     beat++;
   }, 1100);
 }
+export function setMusicTone(rootHz, fifthHz) {
+  if (!actx || !musicOsc1 || !musicOsc2) return;
+  const now = actx.currentTime;
+  musicOsc1.frequency.cancelScheduledValues(now);
+  musicOsc2.frequency.cancelScheduledValues(now);
+  musicOsc1.frequency.setTargetAtTime(rootHz, now, 0.6);
+  musicOsc2.frequency.setTargetAtTime(fifthHz, now, 0.6);
+}
 export function stopMusic() {
   if (musicOsc1) { try { musicOsc1.stop(); } catch {} musicOsc1 = null; }
   if (musicOsc2) { try { musicOsc2.stop(); } catch {} musicOsc2 = null; }

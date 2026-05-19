@@ -527,6 +527,7 @@ export const THEMES = {
     rimColor: 0xff8b3a, rimIntensity: 0.5,
     ambient: 0x2a2030,
     ringColor: 0xd4a72c,
+    musicRoot: 55, musicFifth: 82.5,    // A1 + E2 — moody industrial
     propBuilder: (tmat, outlined) => [
       // Two long subway-style dividing walls create three "tracks" (north/center/south lanes)
       makeSubwayDivider(-10, -7.5, 12, 0.8, tmat, outlined),
@@ -564,6 +565,7 @@ export const THEMES = {
     rimColor: 0x88ff66, rimIntensity: 0.5,
     ambient: 0x303a2c,
     ringColor: 0x6affa0,
+    musicRoot: 43.65, musicFifth: 65.4,  // F1 + C2 — lower, ominous
     propBuilder: (tmat, outlined) => [
       // Cross-shape internal walls dividing arena into 4 wards with central passage
       makeHospitalWall( 0, -10, 0.8, 8,  tmat, outlined),   // vertical, top
@@ -605,6 +607,7 @@ export const THEMES = {
     rimColor: 0xff66aa, rimIntensity: 0.6,
     ambient: 0x4a1828,
     ringColor: 0xffd540,
+    musicRoot: 82.5, musicFifth: 123.47, // E2 + B2 — higher, festive-dark
     propBuilder: (tmat, outlined) => [
       // Central showpiece: striped carousel — must navigate around it
       makeCarnivalCarousel(0, 0, tmat, outlined),
