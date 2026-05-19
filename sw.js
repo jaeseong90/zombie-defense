@@ -1,7 +1,7 @@
 // Dead Corridor — service worker
 // Strategy: network-first for HTML (so updates roll out fast), cache-first for static + CDN libs.
 
-const VERSION = 'dc-v4';
+const VERSION = 'dc-v5';
 const CORE = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const CORE = [
   '/src/data.js',
   '/src/settings.js',
   '/src/audio.js',
+  '/src/themes.js',
   '/manifest.webmanifest',
   '/icon.svg',
   '/icon-maskable.svg',

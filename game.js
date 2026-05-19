@@ -12,6 +12,7 @@ import {
 } from './src/data.js';
 import { settings, vib, loadBest, saveBest as _saveBest, saveSettings } from './src/settings.js';
 import { audio, ensureAudio, startMusic, stopMusic } from './src/audio.js';
+import { THEMES } from './src/themes.js';
 
 // ─── Detect mobile ───────────────────────────────────────────
 const IS_MOBILE =
@@ -20,6 +21,11 @@ const IS_MOBILE =
 
 // Adapter: keep old saveBest() call sites working
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
+
+// Build version (shown on menu)
+const BUILD = 's16-themes';
+const buildEl = document.getElementById('menuBuild');
+if (buildEl) buildEl.textContent = BUILD;
 
 // ============================================================
 // DOM HELPERS
@@ -104,9 +110,11 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 100));
 resize();
 
-// ─── Lighting (set up for cel material) ─────────────────────
-scene.add(new THREE.AmbientLight(0x383040, 0.45));
-scene.add(new THREE.HemisphereLight(0x564a62, 0x1a1620, 0.35));
+// ─── Lighting (mutable — theme switches modify these) ───────
+const ambient = new THREE.AmbientLight(0x383040, 0.45);
+scene.add(ambient);
+const hemi = new THREE.HemisphereLight(0x564a62, 0x1a1620, 0.35);
+scene.add(hemi);
 const keyLight = new THREE.DirectionalLight(0xfff0d6, 1.35);
 keyLight.position.set(-18, 36, 16);
 keyLight.castShadow = !IS_MOBILE;
@@ -145,143 +153,96 @@ function outlined(mesh, scale = 1.05) {
   return mesh;
 }
 
-// ─── Arena floor + bounds ────────────────────────────────────
-function makeFloorTexture() {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = '#1a1424'; g.fillRect(0, 0, 512, 512);
-  // Hex/grid pattern
-  g.strokeStyle = 'rgba(80,40,60,0.45)'; g.lineWidth = 1.2;
-  const cell = 64;
-  for (let x = 0; x <= 512; x += cell) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); }
-  for (let y = 0; y <= 512; y += cell) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
-  // Random splotches
-  for (let i = 0; i < 600; i++) {
-    g.fillStyle = `rgba(${50+Math.random()*40}, 20, 30, ${Math.random() * 0.18})`;
-    g.beginPath(); g.arc(Math.random()*512, Math.random()*512, Math.random()*5+1, 0, Math.PI*2); g.fill();
-  }
-  // Splattered blood
-  for (let i = 0; i < 40; i++) {
-    const x = Math.random()*512, y = Math.random()*512, r = 4 + Math.random()*16;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, 'rgba(80, 16, 14, 0.55)');
-    grad.addColorStop(1, 'rgba(60, 8, 6, 0)');
-    g.fillStyle = grad;
-    g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fill();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-const floorTex = makeFloorTexture();
+// ─── Floor (texture swapped per theme) ──────────────────────
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(ARENA * 2, ARENA * 2),
-  new THREE.MeshLambertMaterial({ map: floorTex, color: 0xb09098 }),
+  new THREE.MeshLambertMaterial({ color: 0xb09098 }),
 );
 floor.rotation.x = -Math.PI/2;
 floor.receiveShadow = !IS_MOBILE;
 scene.add(floor);
-// Subtle glowing arena edge
-const ringGeo = new THREE.RingGeometry(ARENA - 0.5, ARENA, 64);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0x4a2030, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
-const ring = new THREE.Mesh(ringGeo, ringMat);
-ring.rotation.x = -Math.PI/2; ring.position.y = 0.01;
-scene.add(ring);
 
-// ─── Walls around arena ─────────────────────────────────────
-function makeWalls() {
-  const mat = tmat(0x261b34);
+// ─── Theme-driven arena (walls, pillars, ring, props) ───────
+const G_props = [];
+let arenaWalls = [], arenaPillars = [], arenaPillarCaps = [], arenaRing = null;
+let currentThemeName = null;
+
+function applyTheme(name) {
+  const theme = THEMES[name] || THEMES.subway;
+  if (currentThemeName === name) return; // already applied
+  currentThemeName = name;
+
+  // Background + fog
+  scene.background.setHex(theme.bgColor);
+  scene.fog.color.setHex(theme.fogColor);
+  scene.fog.density = theme.fogDensity;
+  // Lighting
+  ambient.color.setHex(theme.ambient);
+  keyLight.color.setHex(theme.keyColor);
+  keyLight.intensity = theme.keyIntensity;
+  rimLight.color.setHex(theme.rimColor);
+  rimLight.intensity = theme.rimIntensity;
+
+  // Floor texture
+  if (floor.material.map) floor.material.map.dispose();
+  floor.material.map = theme.floorTex();
+  floor.material.color.setHex(theme.floorColor);
+  floor.material.needsUpdate = true;
+
+  // Ring (arena edge)
+  if (arenaRing) scene.remove(arenaRing);
+  arenaRing = new THREE.Mesh(
+    new THREE.RingGeometry(ARENA - 0.5, ARENA, 64),
+    new THREE.MeshBasicMaterial({ color: theme.ringColor, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  arenaRing.rotation.x = -Math.PI/2; arenaRing.position.y = 0.01;
+  scene.add(arenaRing);
+
+  // Walls + pillars
+  for (const w of arenaWalls)      scene.remove(w);
+  for (const p of arenaPillars)    scene.remove(p);
+  for (const c of arenaPillarCaps) scene.remove(c);
+  arenaWalls = []; arenaPillars = []; arenaPillarCaps = [];
+  const wallMat = tmat(theme.wallColor);
   const wallH = 1.6;
-  const walls = [];
-  const positions = [
+  const wallPositions = [
     { x: 0, z: -ARENA, w: ARENA * 2, d: 0.6 },
     { x: 0, z:  ARENA, w: ARENA * 2, d: 0.6 },
     { x: -ARENA, z: 0, w: 0.6, d: ARENA * 2 },
     { x:  ARENA, z: 0, w: 0.6, d: ARENA * 2 },
   ];
-  for (const p of positions) {
-    const m = outlined(new THREE.Mesh(new THREE.BoxGeometry(p.w, wallH, p.d), mat), 1.02);
+  for (const p of wallPositions) {
+    const m = outlined(new THREE.Mesh(new THREE.BoxGeometry(p.w, wallH, p.d), wallMat), 1.02);
     m.position.set(p.x, wallH / 2, p.z);
     m.castShadow = m.receiveShadow = !IS_MOBILE;
-    scene.add(m);
-    walls.push(m);
+    scene.add(m); arenaWalls.push(m);
   }
-  // Corner pillars
-  const pillarMat = tmat(0x331f3e);
+  const pillarMat = tmat(theme.pillarColor);
   for (const cx of [-1, 1]) for (const cz of [-1, 1]) {
     const p = outlined(new THREE.Mesh(new THREE.BoxGeometry(1.6, 3.5, 1.6), pillarMat), 1.04);
     p.position.set(cx * (ARENA - 0.8), 1.75, cz * (ARENA - 0.8));
     p.castShadow = !IS_MOBILE;
-    scene.add(p);
-    // Glowing top
+    scene.add(p); arenaPillars.push(p);
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(1.8, 0.2, 1.8),
-      new THREE.MeshBasicMaterial({ color: 0xff5a3a })
+      new THREE.MeshBasicMaterial({ color: theme.pillarCapColor }),
     );
     cap.position.set(cx * (ARENA - 0.8), 3.55, cz * (ARENA - 0.8));
-    scene.add(cap);
+    scene.add(cap); arenaPillarCaps.push(cap);
   }
-}
-makeWalls();
 
-// ─── Arena props (cover) ────────────────────────────────────
-const G_props = [];
-function makeBarrel(x, z) {
-  const g = new THREE.Group();
-  const body = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.95, 16), tmat(0x6a3a1c)), 1.04);
-  body.position.y = 0.475;
-  body.castShadow = !IS_MOBILE;
-  g.add(body);
-  // Two darker bands
-  for (const yy of [0.2, 0.75]) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.08, 16), tmat(0x2a1810));
-    band.position.y = yy;
-    g.add(band);
-  }
-  const top = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 16), tmat(0x1f1208)), 1.04);
-  top.position.y = 0.98;
-  g.add(top);
-  // Glowing hazard rune
-  const rune = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.24, 16),
-    new THREE.MeshBasicMaterial({ color: 0xff7028, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
-  rune.position.set(0, 0.5, 0.46); g.add(rune);
-  g.position.set(x, 0, z);
-  scene.add(g);
-  return { g, x, z, w: 0.45, d: 0.45, type: 'barrel' };
-}
-function makeCrate(x, z) {
-  const g = new THREE.Group();
-  const body = outlined(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), tmat(0x5a3a1c)), 1.04);
-  body.position.y = 0.45;
-  body.castShadow = !IS_MOBILE;
-  g.add(body);
-  // X reinforcement
-  const xmat = tmat(0x2a1810);
-  for (const ang of [Math.PI/4, -Math.PI/4]) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.4, 0.04), xmat);
-    slat.position.set(0, 0.45, 0.56); slat.rotation.z = ang;
-    g.add(slat);
-  }
-  // top frame
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.06, 1.15), xmat);
-  frame.position.y = 0.92; g.add(frame);
-  g.position.set(x, 0, z);
-  scene.add(g);
-  return { g, x, z, w: 0.55, d: 0.55, type: 'crate' };
-}
-function placeProps() {
-  const positions = [
-    [-9, -7, 'barrel'], [9, -8, 'crate'], [-10, 6, 'crate'], [11, 7, 'barrel'],
-    [-6, -12, 'crate'], [6, 11, 'barrel'], [-4, 9, 'barrel'], [4, -4, 'crate'],
-    [-12, 0, 'barrel'], [12, 0, 'barrel'],
-  ];
-  for (const [x, z, type] of positions) {
-    G_props.push(type === 'barrel' ? makeBarrel(x, z) : makeCrate(x, z));
+  // Props
+  for (const p of G_props) scene.remove(p.g);
+  G_props.length = 0;
+  const newProps = theme.propBuilder(tmat, outlined);
+  for (const p of newProps) {
+    scene.add(p.g);
+    G_props.push(p);
   }
 }
-placeProps();
+
+// Initial theme: subway (first wave)
+applyTheme('subway');
 // AABB collide a circular entity (center x,z, radius r) against all props
 function collideProps(ent, r) {
   for (const p of G_props) {
@@ -1791,22 +1752,17 @@ function startWave(idx) {
   for (const p of G.players) {
     if (p.startShield) p.shieldT = Math.max(p.shieldT || 0, p.startShield);
   }
-  // Apply wave event modifiers
+  // Apply theme (sets baseline floor/walls/lighting/fog/props)
+  applyTheme(w.theme || 'subway');
+  // Then layer wave event modifiers on top
   G.event = w.event || null;
   G.zSpdMult = 1; G.spawnIntMult = 1; G.dropMult = 1;
-  scene.fog.density = 0.018;
-  scene.fog.color.setHex(0x140820);
-  keyLight.intensity = 1.35;
-  rimLight.intensity = 0.55;
-  scene.background.setHex(0x0a0510);
   if (G.event === 'speed')   { G.zSpdMult = 1.2; }
-  if (G.event === 'fog')     { scene.fog.density = 0.045; scene.fog.color.setHex(0x1a3320); scene.background.setHex(0x102018); }
-  if (G.event === 'dark')    { keyLight.intensity = 0.55; rimLight.intensity = 0.25; scene.background.setHex(0x050308); }
+  if (G.event === 'fog')     { scene.fog.density *= 1.55; }
+  if (G.event === 'dark')    { keyLight.intensity *= 0.5; rimLight.intensity *= 0.5; }
   if (G.event === 'frenzy')  { G.spawnIntMult = 0.55; G.zSpdMult = 1.12; }
   if (G.event === 'chaos')   { G.dropMult = 2.2; }
-  if (G.event === 'brutal')  { /* boss intro handled at first brute spawn */ }
-  if (G.event === 'final')   { G.spawnIntMult = 0.55; G.zSpdMult = 1.08; scene.fog.density = 0.03; scene.background.setHex(0x18040a); keyLight.color.setHex(0xff8060); }
-  else { keyLight.color.setHex(0xfff0d6); }
+  if (G.event === 'final')   { G.spawnIntMult = 0.55; G.zSpdMult = 1.08; }
   showWaveIntro(w, G.wave);
   if (G.wave === WAVES.length) waveBoxEl.classList.add('boss');
   else waveBoxEl.classList.toggle('boss', !!w.boss);
@@ -2058,11 +2014,17 @@ function handleNetMsg(m) {
 
 function applyNetState(m) {
   const prevPhase = G.phase;
+  const prevWave = G.wave;
   G.phase = m.ph;
   G.wave = m.wv;
   G.score = m.sc;
   G.kills = m.kl;
   G.toSpawnList.length = m.ts || 0; // for HUD remain counter
+  // Sync theme on wave change (peer follows host)
+  if (G.wave !== prevWave && G.wave >= 1 && G.wave <= WAVES.length) {
+    const themeName = WAVES[G.wave - 1].theme || 'subway';
+    applyTheme(themeName);
+  }
   // Shop sync
   if (m.ph === 'shop' && m.sh) {
     const newCards = m.sh.c || [];
