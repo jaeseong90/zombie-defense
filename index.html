@@ -906,6 +906,95 @@ html, body {
 }
 #whiteFlash.on { opacity: 1; transition: opacity 0s; }
 
+/* Tutorial overlay (first launch) */
+#tutorial {
+  position: absolute; inset: 0; z-index: 25;
+  background: rgba(5, 2, 12, 0.85);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto;
+}
+#tutorial .tutInner {
+  background: linear-gradient(180deg, rgba(30, 12, 40, 0.95), rgba(10, 5, 16, 0.95));
+  border: 1px solid rgba(255,183,77,0.3);
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex; flex-direction: column; gap: 12px;
+  max-width: 86vw;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  animation: tutIn 0.3s ease-out;
+}
+@keyframes tutIn { from { opacity: 0; transform: scale(0.93); } to { opacity: 1; transform: scale(1); } }
+#tutorial .tutTitle {
+  font-size: 16px; letter-spacing: 0.32em;
+  background: linear-gradient(180deg, #fff0c4 0%, #ff8b3a 60%, #b8281f 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  font-weight: 900; text-align: center;
+  margin-bottom: 6px;
+}
+#tutorial .tutRow {
+  display: flex; align-items: center; gap: 14px;
+  font-size: 12px; letter-spacing: 0.06em; line-height: 1.5;
+  color: var(--text);
+  font-weight: 600;
+}
+#tutorial .tutKey {
+  width: 36px; height: 36px;
+  background: rgba(255,90,40,0.18);
+  border: 1px solid rgba(255,183,77,0.4);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--accent-gold);
+  flex-shrink: 0;
+}
+#tutorial .tutBtn {
+  background: linear-gradient(135deg, #d33a2a 0%, #ff7235 100%);
+  color: white; cursor: pointer;
+  padding: 14px 28px; border-radius: 10px;
+  font-weight: 800; font-size: 14px; letter-spacing: 0.16em;
+  text-transform: uppercase; border: 1px solid rgba(255, 160, 110, 0.6);
+  margin-top: 14px;
+  box-shadow: 0 6px 20px rgba(255,90,40,0.4);
+}
+#tutorial .tutBtn:active { transform: scale(0.97); }
+
+/* Final-wave dramatic countdown */
+#countdown {
+  position: absolute; inset: 0; z-index: 18;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 50%, transparent 30%, rgba(80,8,12,0.6) 100%);
+  pointer-events: none;
+}
+#countdown.hidden { display: none !important; }
+#countdownNum {
+  font-size: 200px; font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  background: linear-gradient(180deg, #ffe6b0 0%, #ff5040 50%, #b8281f 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 60px rgba(255, 40, 30, 0.6);
+  filter: drop-shadow(0 8px 24px rgba(180, 40, 30, 0.7));
+  animation: countdownPulse 1s ease-out forwards;
+}
+@keyframes countdownPulse {
+  0%   { opacity: 0; transform: scale(0.4); filter: blur(28px); }
+  20%  { opacity: 1; transform: scale(1.15); filter: blur(0); }
+  60%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.6); filter: blur(12px); }
+}
+#countdownLabel {
+  font-size: 22px; letter-spacing: 0.4em;
+  color: var(--accent);
+  font-weight: 900; margin-top: 8px;
+  text-shadow: 0 0 14px var(--accent);
+  animation: countdownLabelFade 1s ease-in;
+}
+@keyframes countdownLabelFade {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 </style>
 <script type="importmap">
 { "imports": {
@@ -1011,6 +1100,32 @@ html, body {
     <div id="dmgFlash"></div>
     <div id="lowHp"></div>
     <div id="whiteFlash"></div>
+    <div id="tutorial" class="hidden">
+      <div class="tutInner">
+        <div class="tutTitle">CONTROLS</div>
+        <div class="tutRow">
+          <div class="tutKey">◐</div>
+          <div class="tutText">좌측 터치 = 이동 조이스틱 (어디든 드래그)</div>
+        </div>
+        <div class="tutRow">
+          <div class="tutKey">◑</div>
+          <div class="tutText">우측 터치 = 조준 (강하게 밀면 자동 사격)</div>
+        </div>
+        <div class="tutRow">
+          <div class="tutKey">★</div>
+          <div class="tutText">슈퍼 게이지 충전 시 탭하면 광역 폭발</div>
+        </div>
+        <div class="tutRow">
+          <div class="tutKey">⬡</div>
+          <div class="tutText">픽업은 인벤으로, 탭해서 사용</div>
+        </div>
+        <button class="tutBtn">시작</button>
+      </div>
+    </div>
+    <div id="countdown" class="hidden">
+      <div id="countdownNum">3</div>
+      <div id="countdownLabel">FINAL STAND</div>
+    </div>
     <button id="pauseBtn" aria-label="Pause">⏸</button>
   </div>
 

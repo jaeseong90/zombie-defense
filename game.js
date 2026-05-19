@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's22-radar';
+const BUILD = 's23-tutorial';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -1980,6 +1980,11 @@ function startWave(idx) {
   pendingEvents.push({ t: 'wave', n: G.wave });
   ensureAudio(); audio.wave?.();
   vib(60);
+  // Final wave: dramatic countdown delays first spawn
+  if (w.event === 'final') {
+    G.spawnAccum = -3.5;
+    setTimeout(() => playFinalCountdown(() => {}), 600);
+  }
 }
 
 function updateWave(dt) {
@@ -2188,6 +2193,56 @@ function showBanner(title, sub, btnLabel) {
   $('bannerBtn').addEventListener('click', () => location.reload());
 }
 
+// First-launch tutorial overlay
+function maybeShowTutorial(thenStart) {
+  const seen = loadBest();
+  if (seen.tutorialSeen) { thenStart(); return; }
+  const el = $('tutorial');
+  if (!el) { thenStart(); return; }
+  el.classList.remove('hidden');
+  el.querySelector('.tutBtn').onclick = () => {
+    el.classList.add('hidden');
+    // Mark seen
+    try {
+      const cur = loadBest();
+      cur.tutorialSeen = true;
+      localStorage.setItem('dc_best_v1', JSON.stringify(cur));
+    } catch {}
+    thenStart();
+  };
+}
+
+// Final-wave dramatic 3-2-1 countdown
+function playFinalCountdown(onDone) {
+  const el = $('countdown');
+  const numEl = $('countdownNum');
+  if (!el || !numEl) { onDone(); return; }
+  el.classList.remove('hidden');
+  ensureAudio();
+  let n = 3;
+  function tick() {
+    numEl.textContent = n;
+    numEl.style.animation = 'none';
+    void numEl.offsetWidth;
+    numEl.style.animation = '';
+    audio.wave?.();
+    vib(80);
+    if (n > 1) {
+      n--;
+      setTimeout(tick, 900);
+    } else {
+      setTimeout(() => {
+        el.classList.add('hidden');
+        whiteFlash();
+        shake(0.8);
+        camPunch(0.4);
+        onDone();
+      }, 900);
+    }
+  }
+  tick();
+}
+
 function startGame(coop = false, isPeerJoin = false) {
   G.isCoop = coop;
   G.phase = 'play';
@@ -2212,9 +2267,8 @@ function startGame(coop = false, isPeerJoin = false) {
   enterImmersive();
   ensureAudio();
   startMusic();
-  if (!isPeerJoin) startWave(0);
-  // First HUD draw
   hp2Card.classList.toggle('hidden', !coop);
+  if (!isPeerJoin) maybeShowTutorial(() => startWave(0));
 }
 
 async function enterImmersive() {
