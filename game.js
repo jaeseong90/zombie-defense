@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's19-impact';
+const BUILD = 's20-intro';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -1082,6 +1082,8 @@ function killZombie(z, ownerIdx) {
   }
   pendingEvents.push({ t: 'kill', x: z.x, z: z.z, s: earned, cb: p ? p.combo : 1 });
   ensureAudio(); audio.kill?.();
+  // Milestone toasts
+  checkAchievements(z);
   // Heavy hits feel weighty — brief slow-mo + flash + camera punch
   if (z.type === 'brute') {
     hitStop(0.12);
@@ -1908,10 +1910,58 @@ function updateWave(dt) {
 function showWaveIntro(w, waveNum) {
   waveIntroNumEl.textContent = String(waveNum).padStart(2, '0');
   waveIntroDescEl.textContent = w.desc;
+  const themeEl = document.getElementById('waveIntroTheme');
+  if (themeEl) themeEl.textContent = (w.theme || 'arena').toUpperCase();
   waveIntroEl.classList.remove('show', 'boss');
   if (w.boss) waveIntroEl.classList.add('boss');
   void waveIntroEl.offsetWidth;
   waveIntroEl.classList.add('show');
+  // Theme-tinted screen wash
+  const tintEl = document.getElementById('waveTint');
+  if (tintEl) {
+    tintEl.classList.remove('on', 'subway', 'hospital', 'carnival');
+    if (w.theme) tintEl.classList.add(w.theme);
+    void tintEl.offsetWidth;
+    tintEl.classList.add('on');
+    setTimeout(() => tintEl.classList.remove('on'), 50);
+  }
+}
+
+// ─── Achievements / milestone toasts ────────────────────────
+const achievementsEl = document.getElementById('achievements');
+const _achGiven = new Set();
+function showAchievement(id, icon, text) {
+  if (!achievementsEl) return;
+  if (_achGiven.has(id)) return;
+  _achGiven.add(id);
+  const el = document.createElement('div');
+  el.className = 'achTrophy';
+  el.innerHTML = `<span class="icon">${icon}</span>${text}`;
+  achievementsEl.appendChild(el);
+  setTimeout(() => el.remove(), 2700);
+  vib(40);
+  ensureAudio(); audio.pickup?.();
+}
+function resetAchievements() { _achGiven.clear(); }
+
+// Detect milestones (called from killZombie / wave events)
+function checkAchievements(z) {
+  // First blood
+  if (G.kills === 1) showAchievement('first', '🩸', 'FIRST BLOOD');
+  if (G.kills === 10) showAchievement('blood10', '⚔', '10 KILLS');
+  if (G.kills === 30) showAchievement('blood30', '⚡', '30 KILLS');
+  if (G.kills === 60) showAchievement('blood60', '🔥', '60 KILLS');
+  // Brute slayer
+  if (z && z.type === 'brute') {
+    showAchievement('brute', '👹', 'BRUTE SLAYER');
+  }
+  // Combo milestones
+  const me = G.players[G.myIdx];
+  if (me) {
+    if (me.combo === 5) showAchievement('combo5', '🎯', 'COMBO x5');
+    if (me.combo === 7) showAchievement('combo7', '💀', 'COMBO x7');
+    if (me.combo === 8) showAchievement('combo8', '⭐', 'MAX COMBO');
+  }
 }
 
 // ============================================================
@@ -2039,6 +2089,7 @@ function startGame(coop = false, isPeerJoin = false) {
   G.isCoop = coop;
   G.phase = 'play';
   G.t = 0;
+  resetAchievements();
   if (!isPeerJoin) {
     G.wave = 0;
     G.score = 0;
