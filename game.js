@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's23-tutorial';
+const BUILD = 's24-spawn-warn';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -805,10 +805,11 @@ slot1El.addEventListener('click', () => useItem(1));
 // ============================================================
 // SIMULATION
 // ============================================================
-function spawnZombie(type) {
+// Pending spawn warnings — show a red marker at the spawn spot for ~0.6s before zombie appears.
+const spawnWarnings = [];
+function queueSpawn(type) {
   const spec = ZTYPE[type];
-  if (G.zombies.filter(z => z.alive).length >= MAX_ZOMBIES) return;
-  // Spawn from arena edge
+  if (G.zombies.filter(z => z.alive).length + spawnWarnings.length >= MAX_ZOMBIES) return;
   const side = Math.floor(Math.random() * 4);
   let x, z;
   const margin = ARENA - 1.5;
@@ -816,6 +817,30 @@ function spawnZombie(type) {
   else if (side === 1) { x =  margin - Math.random() * 0.5; z = (Math.random() - 0.5) * margin * 2; }
   else if (side === 2) { x = (Math.random() - 0.5) * margin * 2; z = -margin + Math.random() * 0.5; }
   else                 { x = (Math.random() - 0.5) * margin * 2; z =  margin - Math.random() * 0.5; }
+  // Create visual marker
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.5, 24), ringMat);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.set(x, 0.04, z);
+  scene.add(ring);
+  spawnWarnings.push({ x, z, type, t: 0.65, ring });
+}
+function updateSpawnWarnings(dt) {
+  for (let i = spawnWarnings.length - 1; i >= 0; i--) {
+    const w = spawnWarnings[i];
+    w.t -= dt;
+    const k = 1 - w.t / 0.65;  // 0 → 1 over the warning period
+    w.ring.scale.setScalar(1 + k * 2.2);
+    w.ring.material.opacity = (1 - k) * 0.85;
+    if (w.t <= 0) {
+      scene.remove(w.ring);
+      spawnWarnings.splice(i, 1);
+      spawnZombieAt(w.x, w.z, w.type);
+    }
+  }
+}
+function spawnZombieAt(x, z, type) {
+  const spec = ZTYPE[type];
   const meshInfo = createZombieMesh(type);
   // Set position BEFORE adding to scene so it doesn't flash at origin for one frame
   meshInfo.g.position.set(x, 0, z);
@@ -1605,15 +1630,17 @@ function shake(amt) { shakeAmt = Math.max(shakeAmt, amt); }
 
 // ─── Camera follow ──────────────────────────────────────────
 function updateCamera(dt) {
-  // Centroid of alive players
+  // Centroid of alive players, with velocity lead (camera anticipates motion)
   let cx = 0, cz = 0, n = 0;
   for (const p of G.players) {
     if (!p.alive) continue;
-    cx += p.x; cz += p.z; n++;
+    cx += p.x + p.vx * 0.32;
+    cz += p.z + p.vz * 0.32;
+    n++;
   }
   if (n === 0) return;
   cx /= n; cz /= n;
-  CAM_TARGET.lerp(new THREE.Vector3(cx, 0, cz), 1 - Math.exp(-8 * dt));
+  CAM_TARGET.lerp(new THREE.Vector3(cx, 0, cz), 1 - Math.exp(-6 * dt));
   // Ortho camera target — move position with target offset
   camera.position.set(CAM_TARGET.x, 30, CAM_TARGET.z + 22);
   if (shakeAmt > 0) {
@@ -1995,7 +2022,7 @@ function updateWave(dt) {
   G.spawnAccum += dt;
   while (G.spawnAccum > spawnInt && G.toSpawnList.length) {
     G.spawnAccum -= spawnInt;
-    spawnZombie(G.toSpawnList.shift());
+    queueSpawn(G.toSpawnList.shift());
   }
   // Check wave complete
   const aliveZ = G.zombies.filter(z => z.alive).length;
@@ -2901,6 +2928,7 @@ function loop(now) {
       updateBullets(dt);
       updateBulletsVsPlayers();
       updateParticles(dt);
+      updateSpawnWarnings(dt);
       updateWave(dt);
     } else if (G.phase !== 'shop') {
       // Peer: visual-only bullet movement + particles
