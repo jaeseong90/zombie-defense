@@ -470,6 +470,98 @@ html, body {
   #roomCodeDisplay { font-size: 28px; letter-spacing: 8px; padding: 12px 18px 12px 26px; }
   .hpCard { min-width: 140px; }
 }
+
+/* Default desktop/tablet: left column (title block) + right column (panels) side by side */
+#menuLeft {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  text-align: center;
+}
+#menuRight {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+#menuMain {
+  display: flex; flex-direction: column; gap: 10px;
+}
+#menu {
+  flex-direction: row;
+  align-items: center; justify-content: center;
+  gap: clamp(28px, 6vw, 72px);
+  padding: 32px 40px;
+}
+
+/* Vertical separator between left and right (sleek touch) */
+#menuLeft::after {
+  content: '';
+  position: absolute;
+  width: 1px; height: 56vh; max-height: 360px;
+  background: linear-gradient(180deg, transparent, rgba(255,90,58,0.25), transparent);
+  left: 50%; top: 22vh;
+  pointer-events: none;
+}
+
+/* Mobile portrait — fall back to stacked column with rotate warn handling */
+@media (orientation: portrait) {
+  #menu { flex-direction: column; padding: 28px; }
+  #menuLeft::after { display: none; }
+  #menuLeft { text-align: center; }
+}
+
+/* Landscape phones (height < 540px): tighter row layout, smaller fonts */
+@media (orientation: landscape) and (max-height: 540px) {
+  #menu {
+    gap: clamp(20px, 5vw, 56px);
+    padding: 12px 24px;
+  }
+  #menuLeft { align-items: flex-start; text-align: left; gap: 8px; max-width: 46vw; }
+  #menuTitle { margin-bottom: 0; align-items: flex-start; gap: 2px; }
+  #menuTitle h1 { font-size: clamp(28px, 6.4vh, 44px); letter-spacing: 0.08em; }
+  #menuTitle .pre { font-size: 9px; letter-spacing: 0.34em; }
+  #menuTitle .sub { font-size: 9px; letter-spacing: 0.22em; margin-top: 2px; }
+  #menuTagline {
+    margin: 0; font-size: 11px; line-height: 1.45;
+    max-width: 44vw; text-align: left;
+  }
+  #menuMain { gap: 8px; }
+  .menuBtn {
+    font-size: 12px; padding: 11px 20px; min-width: 220px;
+    letter-spacing: 0.06em; border-radius: 8px;
+  }
+  .menuPanel {
+    padding: 14px 20px; gap: 8px; min-width: 240px; max-width: none;
+    border-radius: 12px;
+  }
+  .menuPanel .label { font-size: 9px; letter-spacing: 0.28em; }
+  #roomCodeDisplay {
+    font-size: 26px; letter-spacing: 6px;
+    padding: 7px 14px 7px 20px;
+    border-radius: 8px;
+  }
+  #joinInput {
+    font-size: 22px; letter-spacing: 5px;
+    padding: 9px 12px; width: 190px;
+    border-radius: 8px;
+  }
+  .statusLine { font-size: 9.5px; min-height: 12px; letter-spacing: 0.14em; }
+  .menuFooter { display: none; }
+  #menuLeft::after {
+    height: 50vh; max-height: 240px; top: 25vh;
+    left: auto; right: 0;
+    transform: translateX(50%);
+  }
+}
+
+/* Extra-tight: very short phones in landscape (e.g. iPhone SE 375h) */
+@media (orientation: landscape) and (max-height: 400px) {
+  #menu { gap: 24px; padding: 8px 18px; }
+  #menuLeft { gap: 4px; }
+  #menuTitle h1 { font-size: 26px; }
+  #menuTitle .pre, #menuTitle .sub { font-size: 8px; }
+  #menuTagline { font-size: 10px; line-height: 1.35; }
+  .menuBtn { padding: 8px 16px; font-size: 11px; min-width: 200px; }
+  .menuPanel { padding: 10px 16px; gap: 6px; min-width: 220px; }
+  #roomCodeDisplay { font-size: 22px; letter-spacing: 5px; padding: 6px 12px 6px 18px; }
+  #joinInput { font-size: 19px; width: 170px; padding: 7px 10px; }
+}
 </style>
 </head>
 <body>
@@ -478,32 +570,35 @@ html, body {
     <div id="menuBg"></div>
     <canvas id="menuEmbers"></canvas>
 
-    <div id="menuTitle">
-      <div class="pre">CO-OP DEFENSE</div>
-      <h1>DEAD CORRIDOR</h1>
-      <div class="sub">10 · WAVES · 5 · ENEMY · TYPES</div>
+    <div id="menuLeft">
+      <div id="menuTitle">
+        <div class="pre">CO-OP DEFENSE</div>
+        <h1>DEAD CORRIDOR</h1>
+        <div class="sub">10 · WAVES · 5 · ENEMY · TYPES</div>
+      </div>
+      <p id="menuTagline">두 명이 등 맞대고 10웨이브를 막아내세요. 좌측 = 이동, 우측 = 조준 + 자동 사격. 좀비를 처치하면 픽업이 떨어집니다.</p>
     </div>
 
-    <p id="menuTagline">두 명이 등 맞대고 15웨이브를 막아내세요. 좌측 = 이동, 우측 = 조준 + 자동 사격. 좀비를 처치하면 픽업이 떨어집니다.</p>
+    <div id="menuRight">
+      <div id="menuMain">
+        <button class="menuBtn primary"   id="btnHost">🛡  방 만들기 (P1)</button>
+        <button class="menuBtn secondary" id="btnJoin">⚔  참가하기 (P2)</button>
+      </div>
 
-    <div id="menuMain" style="display:flex;flex-direction:column;gap:10px;">
-      <button class="menuBtn primary"   id="btnHost">🛡  방 만들기 (P1)</button>
-      <button class="menuBtn secondary" id="btnJoin">⚔  참가하기 (P2)</button>
-    </div>
+      <div id="menuHost" class="hidden menuPanel">
+        <div class="label">Room Code</div>
+        <div id="roomCodeDisplay">------</div>
+        <p id="hostStatus" class="statusLine">서버에 연결 중…</p>
+        <button class="menuBtn" id="btnHostBack">← 뒤로</button>
+      </div>
 
-    <div id="menuHost" class="hidden menuPanel">
-      <div class="label">Room Code</div>
-      <div id="roomCodeDisplay">------</div>
-      <p id="hostStatus" class="statusLine">서버에 연결 중…</p>
-      <button class="menuBtn" id="btnHostBack">← 뒤로</button>
-    </div>
-
-    <div id="menuJoin" class="hidden menuPanel">
-      <div class="label">Enter Room Code</div>
-      <input id="joinInput" maxlength="6" autocomplete="off" autocapitalize="characters" inputmode="text" placeholder="ABCDEF" />
-      <p id="joinStatus" class="statusLine"></p>
-      <button class="menuBtn primary" id="btnJoinConfirm">참가</button>
-      <button class="menuBtn" id="btnJoinBack">← 뒤로</button>
+      <div id="menuJoin" class="hidden menuPanel">
+        <div class="label">Enter Room Code</div>
+        <input id="joinInput" maxlength="6" autocomplete="off" autocapitalize="characters" inputmode="text" placeholder="ABCDEF" />
+        <p id="joinStatus" class="statusLine"></p>
+        <button class="menuBtn primary" id="btnJoinConfirm">참가</button>
+        <button class="menuBtn" id="btnJoinBack">← 뒤로</button>
+      </div>
     </div>
 
     <div class="menuFooter">
@@ -842,8 +937,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, canvas, powerP
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, DPR_CAP));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+// Cleaner cel look: linear tone mapping preserves the gradient-map step edges
+renderer.toneMapping = THREE.LinearToneMapping;
+renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const composer = new EffectComposer(renderer);
@@ -853,9 +949,9 @@ composer.addPass(bloom);
 const finalPass = new ShaderPass({
   uniforms: {
     tDiffuse: { value: null },
-    vignette: { value: 0.62 },
-    chroma:   { value: 0.0014 },
-    tint:     { value: new THREE.Color(0xff6440) },
+    vignette: { value: 0.34 },
+    chroma:   { value: 0.0008 },
+    tint:     { value: new THREE.Color(0xffae90) },
     shakeAmt: { value: 0 },
     time:     { value: 0 },
   },
@@ -1041,20 +1137,26 @@ const crateTexture    = makeCrateTexture();
 const pillarTexture   = makePillarTexture();
 
 // ─── Lighting ──────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x1a1424, 0.4));
-scene.add(new THREE.HemisphereLight(0x4a3a5a, 0x150810, 0.45));
-const moonDir = new THREE.DirectionalLight(0xff7050, 0.65);
-moonDir.position.set(-30, 50, -10);
-moonDir.castShadow = true;
+// Cel-shading needs bright ambient + strong key so the gradient steps read clean
+scene.add(new THREE.AmbientLight(0x4a4256, 0.65));
+scene.add(new THREE.HemisphereLight(0x6a5a72, 0x1f1a26, 0.55));
+const moonDir = new THREE.DirectionalLight(0xfff0d6, 1.05);
+moonDir.position.set(-22, 42, 18);
+moonDir.castShadow = !IS_MOBILE;
 moonDir.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 moonDir.shadow.camera.left = -45; moonDir.shadow.camera.right = 45;
 moonDir.shadow.camera.top = 45;   moonDir.shadow.camera.bottom = -45;
 moonDir.shadow.camera.near = 1;   moonDir.shadow.camera.far = 120;
 moonDir.shadow.bias = -0.0004;
 scene.add(moonDir);
-const rimLight = new THREE.DirectionalLight(0x3a5aff, 0.18);
-rimLight.position.set(20, 25, 30);
+// Cool rim/fill from opposite angle (separates silhouettes from background)
+const rimLight = new THREE.DirectionalLight(0x6a8aff, 0.55);
+rimLight.position.set(28, 24, -36);
 scene.add(rimLight);
+// Warm ground bounce
+const bounce = new THREE.DirectionalLight(0xff7a55, 0.22);
+bounce.position.set(0, -12, 6);
+scene.add(bounce);
 
 const moon = new THREE.Mesh(new THREE.SphereGeometry(7, 32, 24), new THREE.MeshBasicMaterial({ color: 0xff6840 }));
 moon.position.set(-60, 45, -80);
@@ -1150,174 +1252,304 @@ for (const w of MAP_WALLS) {
   }
 }
 
-// ─── Player mesh ───────────────────────────────────────────
+// ─── Toon shading + outline utilities (Brawl Stars cel look) ──
+// 4-step gradient map gives flat-painted cel shading: shadow / mid / light / hilite
+const TOON_GRADIENT = (() => {
+  const data = new Uint8Array([72,72,80,255,  150,150,160,255,  220,220,230,255,  255,255,255,255]);
+  const tex = new THREE.DataTexture(data, 4, 1);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+})();
+function tmat(color, opts = {}) {
+  return new THREE.MeshToonMaterial({ color, gradientMap: TOON_GRADIENT, ...opts });
+}
+// Inverted-hull outline (Brawl-style chunky black ring around silhouette).
+// Skipped on mobile to keep draw calls under control.
+const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: 0x05050a, side: THREE.BackSide });
+function outline(mesh, scale = 1.05) {
+  if (IS_MOBILE) return mesh;
+  const o = new THREE.Mesh(mesh.geometry, OUTLINE_MAT);
+  o.scale.multiplyScalar(scale);
+  o.renderOrder = -1;
+  mesh.add(o);
+  return mesh;
+}
+
+// ─── Player mesh (chibi proportions, cel-shaded) ─────────────
 function createPlayerMesh(idx) {
   const isP1 = idx === 0;
-  const accent = isP1 ? 0x2e6fcf : 0x2db862;
-  const accentEm = isP1 ? 0x4a9eff : 0x3ddc84;
+  // Bold saturated team colors (Brawl-style palette)
+  const accent      = isP1 ? 0x3478ff : 0x36d97e;
+  const accentDeep  = isP1 ? 0x1f4cc8 : 0x1c9054;
+  const accentGlow  = isP1 ? 0x7ec0ff : 0x9cf2c8;
 
   const g = new THREE.Group();
-  const vestMat = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.55, metalness: 0.3, emissive: accentEm, emissiveIntensity: 0.08 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1a1f2a, roughness: 0.75, metalness: 0.2 });
-  const skinMat  = new THREE.MeshStandardMaterial({ color: 0xd4a785, roughness: 0.7 });
-  const helmetMat = new THREE.MeshStandardMaterial({ color: 0x252830, roughness: 0.5, metalness: 0.55 });
-  const gunMat   = new THREE.MeshStandardMaterial({ color: 0x14161e, roughness: 0.4, metalness: 0.7 });
-  const gunDetailMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.3, metalness: 0.85 });
+  const vestMat   = tmat(accent,     { emissive: accentGlow, emissiveIntensity: 0.12 });
+  const accentMat = tmat(accentDeep);
+  const pantsMat  = tmat(0x2a2f3d);
+  const skinMat   = tmat(0xffd5a0);
+  const helmetMat = tmat(0x16181f);
+  const gunMat    = tmat(0x131520);
+  const gunMetal  = tmat(0x3c3e4a);
+  const bootMat   = tmat(0x0d0d14);
 
-  const legGeo = new THREE.CylinderGeometry(0.16, 0.18, 0.85, 8);
-  const legL = new THREE.Mesh(legGeo, pantsMat); legL.position.set(-0.18, 0.42, 0); legL.castShadow = true;
-  const legR = new THREE.Mesh(legGeo, pantsMat); legR.position.set( 0.18, 0.42, 0); legR.castShadow = true;
-  g.add(legL); g.add(legR);
-  const bootGeo = new THREE.BoxGeometry(0.28, 0.18, 0.45);
-  const bootMat = new THREE.MeshStandardMaterial({ color: 0x0a0a10, roughness: 0.5, metalness: 0.4 });
-  const bootL = new THREE.Mesh(bootGeo, bootMat); bootL.position.set(-0.18, 0.09, 0.05); bootL.castShadow = true;
-  const bootR = new THREE.Mesh(bootGeo, bootMat); bootR.position.set( 0.18, 0.09, 0.05); bootR.castShadow = true;
-  g.add(bootL); g.add(bootR);
+  // ─ Stubby boots ─
+  const bootGeo = new THREE.BoxGeometry(0.32, 0.22, 0.5);
+  const bootL = outline(new THREE.Mesh(bootGeo, bootMat), 1.07);
+  bootL.position.set(-0.2, 0.11, 0.06); bootL.castShadow = !IS_MOBILE; g.add(bootL);
+  const bootR = outline(new THREE.Mesh(bootGeo, bootMat), 1.07);
+  bootR.position.set( 0.2, 0.11, 0.06); bootR.castShadow = !IS_MOBILE; g.add(bootR);
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.72, 0.42), vestMat);
-  torso.position.set(0, 1.15, 0); torso.castShadow = true; g.add(torso);
-  for (const dx of [-0.18, 0.18]) {
-    const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.06), pantsMat);
-    p.position.set(dx, 1.05, 0.22); p.castShadow = true; g.add(p);
-  }
-  const chestLight = new THREE.Mesh(new THREE.CircleGeometry(0.05, 12), new THREE.MeshBasicMaterial({ color: accentEm }));
-  chestLight.position.set(0.18, 1.32, 0.215); chestLight.rotation.y = Math.PI; g.add(chestLight);
+  // ─ Stubby legs ─
+  const legGeo = new THREE.CylinderGeometry(0.18, 0.16, 0.45, 10);
+  const legL = outline(new THREE.Mesh(legGeo, pantsMat), 1.07);
+  legL.position.set(-0.2, 0.42, 0); legL.castShadow = !IS_MOBILE; g.add(legL);
+  const legR = outline(new THREE.Mesh(legGeo, pantsMat), 1.07);
+  legR.position.set( 0.2, 0.42, 0); legR.castShadow = !IS_MOBILE; g.add(legR);
 
-  const armGeo = new THREE.CapsuleGeometry(0.1, 0.5, 4, 6);
-  const armL = new THREE.Mesh(armGeo, vestMat); armL.position.set(-0.38, 1.2, -0.15); armL.rotation.x = -0.6; armL.castShadow = true;
-  const armR = new THREE.Mesh(armGeo, vestMat); armR.position.set( 0.38, 1.2, -0.15); armR.rotation.x = -0.6; armR.castShadow = true;
-  g.add(armL); g.add(armR);
-  const handGeo = new THREE.SphereGeometry(0.09, 8, 6);
-  const handL = new THREE.Mesh(handGeo, gunMat); handL.position.set(-0.32, 1.08, -0.6); g.add(handL);
-  const handR = new THREE.Mesh(handGeo, gunMat); handR.position.set( 0.32, 1.08, -0.6); g.add(handR);
+  // ─ Beefy torso ─
+  const torso = outline(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.6, 0.48), vestMat), 1.05);
+  torso.position.set(0, 0.92, 0); torso.castShadow = !IS_MOBILE; g.add(torso);
+  // Chest plate (darker accent)
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.06), accentMat);
+  plate.position.set(0, 0.95, 0.24); g.add(plate);
+  // Glowing chest light
+  const chestLight = new THREE.Mesh(new THREE.CircleGeometry(0.07, 16),
+    new THREE.MeshBasicMaterial({ color: accentGlow }));
+  chestLight.position.set(0, 1.05, 0.275); g.add(chestLight);
+  // Belt strap (touch of detail)
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.08, 0.5), tmat(0x111319));
+  belt.position.set(0, 0.66, 0); g.add(belt); outline(belt, 1.04);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), skinMat);
-  head.position.set(0, 1.7, 0); head.castShadow = true; g.add(head);
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 8, 0, Math.PI*2, 0, Math.PI/1.9), helmetMat);
-  helmet.position.set(0, 1.76, 0); helmet.castShadow = true; g.add(helmet);
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.025, 6, 24),
-    new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.6 }));
-  band.position.set(0, 1.76, 0); band.rotation.x = Math.PI/2; g.add(band);
-  const nvg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.12),
-    new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.4, metalness: 0.7 }));
-  nvg.position.set(0, 1.73, -0.2); g.add(nvg);
-  const nvgLens = new THREE.Mesh(new THREE.CircleGeometry(0.04, 12), new THREE.MeshBasicMaterial({ color: accentEm }));
-  nvgLens.position.set(0, 1.73, -0.27); g.add(nvgLens);
+  // ─ Chunky pauldrons (oversized) ─
+  const shoulderGeo = new THREE.SphereGeometry(0.2, 12, 10);
+  const shoulderL = outline(new THREE.Mesh(shoulderGeo, vestMat), 1.06);
+  shoulderL.position.set(-0.48, 1.12, 0); g.add(shoulderL);
+  const shoulderR = outline(new THREE.Mesh(shoulderGeo, vestMat), 1.06);
+  shoulderR.position.set( 0.48, 1.12, 0); g.add(shoulderR);
 
+  // ─ Forearms ─
+  const armGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.42, 10);
+  const armL = outline(new THREE.Mesh(armGeo, vestMat), 1.06);
+  armL.position.set(-0.46, 0.84, -0.12); armL.rotation.x = -0.7; g.add(armL);
+  const armR = outline(new THREE.Mesh(armGeo, vestMat), 1.06);
+  armR.position.set( 0.46, 0.84, -0.12); armR.rotation.x = -0.7; g.add(armR);
+
+  // ─ Oversized gloves ─
+  const gloveGeo = new THREE.SphereGeometry(0.13, 12, 10);
+  const gloveL = outline(new THREE.Mesh(gloveGeo, gunMat), 1.06);
+  gloveL.position.set(-0.38, 0.76, -0.58); g.add(gloveL);
+  const gloveR = outline(new THREE.Mesh(gloveGeo, gunMat), 1.06);
+  gloveR.position.set( 0.38, 0.76, -0.58); g.add(gloveR);
+
+  // ─ BIG head (chibi signature) ─
+  const head = outline(new THREE.Mesh(new THREE.SphereGeometry(0.36, 18, 14), skinMat), 1.05);
+  head.position.set(0, 1.5, 0); head.castShadow = !IS_MOBILE; g.add(head);
+
+  // ─ Full helmet wrap ─
+  const helmet = outline(new THREE.Mesh(
+    new THREE.SphereGeometry(0.41, 18, 12, 0, Math.PI*2, 0, Math.PI/1.85),
+    helmetMat
+  ), 1.04);
+  helmet.position.set(0, 1.55, 0); helmet.castShadow = !IS_MOBILE; g.add(helmet);
+  // Helmet rim accent
+  const helmetRim = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.035, 8, 28), accentMat);
+  helmetRim.position.set(0, 1.45, 0); helmetRim.rotation.x = Math.PI/2; g.add(helmetRim);
+
+  // ─ Glowing visor (signature look) ─
+  const visorGeo = new THREE.SphereGeometry(0.37, 18, 8, 0, Math.PI*2, Math.PI/2 - 0.18, 0.28);
+  const visor = new THREE.Mesh(visorGeo,
+    new THREE.MeshBasicMaterial({ color: accentGlow, transparent: true, opacity: 0.95 }));
+  visor.position.set(0, 1.5, 0); g.add(visor);
+
+  // ─ Team disc on top of helmet (P1/P2 ID) ─
+  const teamDisc = new THREE.Mesh(new THREE.CircleGeometry(0.14, 18),
+    new THREE.MeshBasicMaterial({ color: accentGlow }));
+  teamDisc.position.set(0, 1.86, 0); teamDisc.rotation.x = -Math.PI/2; g.add(teamDisc);
+
+  // ─ Big chunky rifle ─
   const rifleGrp = new THREE.Group();
-  const rb = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.9), gunMat);
-  rb.castShadow = true; rifleGrp.add(rb);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), gunDetailMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0, 0.02, -0.62); rifleGrp.add(barrel);
-  const supp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.18, 8), gunDetailMat);
-  supp.rotation.x = Math.PI/2; supp.position.set(0, 0.02, -0.92); rifleGrp.add(supp);
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.32), gunDetailMat);
-  stock.position.set(0, 0, 0.55); rifleGrp.add(stock);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.18), gunDetailMat);
-  mag.position.set(0, -0.18, 0.05); rifleGrp.add(mag);
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.7), gunDetailMat);
-  rail.position.set(0, 0.12, -0.1); rifleGrp.add(rail);
-  const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 8), gunDetailMat);
+  const rb = outline(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 1.0), gunMat), 1.04);
+  rifleGrp.add(rb);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.58, 10), gunMetal);
+  barrel.rotation.x = Math.PI/2; barrel.position.set(0, 0.03, -0.7); rifleGrp.add(barrel);
+  const muzzle = outline(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.22, 12), gunMetal), 1.05);
+  muzzle.rotation.x = Math.PI/2; muzzle.position.set(0, 0.03, -1.05); rifleGrp.add(muzzle);
+  const stock = outline(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.36), gunMetal), 1.04);
+  stock.position.set(0, 0, 0.6); rifleGrp.add(stock);
+  const mag = outline(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.3, 0.22), accentMat), 1.05);
+  mag.position.set(0, -0.24, 0.05); rifleGrp.add(mag);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.18, 0.12), accentMat);
+  grip.position.set(0, -0.2, -0.05); rifleGrp.add(grip);
+  const scope = outline(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.26, 10), gunMetal), 1.05);
   scope.rotation.x = Math.PI/2; scope.position.set(0, 0.2, -0.1); rifleGrp.add(scope);
-  const laser = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2020 }));
-  laser.position.set(0.07, 0.02, -0.92); rifleGrp.add(laser);
-  rifleGrp.position.set(0.05, 1.18, -0.18);
+  // accent stripe on body
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.7), accentMat);
+  stripe.position.set(0, 0.15, -0.1); rifleGrp.add(stripe);
+  rifleGrp.position.set(0.08, 0.88, -0.18);
   g.add(rifleGrp);
 
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10),
+  // ─ Muzzle flash ─
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 12),
     new THREE.MeshBasicMaterial({ color: 0xffe5a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flash.position.set(0.05, 1.2, -1.18); g.add(flash);
-  const flashCore = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8),
+  flash.position.set(0.08, 0.91, -1.32); g.add(flash);
+  const flashCore = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10),
     new THREE.MeshBasicMaterial({ color: 0xfff8c0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  flashCore.position.set(0.05, 1.2, -1.15); g.add(flashCore);
+  flashCore.position.set(0.08, 0.91, -1.28); g.add(flashCore);
   const muzzleLight = new THREE.PointLight(0xffd070, 0, 6, 2);
-  muzzleLight.position.set(0.05, 1.2, -1.18); g.add(muzzleLight);
+  muzzleLight.position.set(0.08, 0.91, -1.32); g.add(muzzleLight);
 
-  // glowing aura when power-up is active
-  const aura = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 16),
+  // ─ Power-up aura ─
+  const aura = new THREE.Mesh(new THREE.SphereGeometry(1.0, 24, 16),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  aura.position.y = 1.0; g.add(aura);
+  aura.position.y = 0.85; g.add(aura);
 
   return { g, rifleGrp, flash, flashCore, muzzleLight, legL, legR, aura };
 }
 const playerMeshes = [createPlayerMesh(0), createPlayerMesh(1)];
 scene.add(playerMeshes[0].g); scene.add(playerMeshes[1].g);
 
-// ─── Zombie mesh ───────────────────────────────────────────
+// ─── Zombie mesh (chibi, cel-shaded, type-distinct silhouettes) ──
+const ZOMBIE_PALETTE = {
+  regular:  { body: 0x7ab23f, skin: 0xcad97a, dark: 0x42651e },  // vivid green walker
+  fast:     { body: 0xd83a4f, skin: 0xf08080, dark: 0x6a1518 },  // crimson runner
+  spitter:  { body: 0x4eb238, skin: 0xa8e060, dark: 0x215a1a },  // toxic lime
+  exploder: { body: 0xff7028, skin: 0xffc070, dark: 0x802a0e },  // orange bomber
+  big:      { body: 0x556b3e, skin: 0x8c7f4a, dark: 0x1f2818 },  // dark olive brute
+};
 function createZombieMesh(type) {
   const spec = ZTYPE[type];
   const s = spec.size;
   const g = new THREE.Group();
+  const pal = ZOMBIE_PALETTE[type] || ZOMBIE_PALETTE.regular;
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color: spec.color, roughness: 0.92, metalness: 0.03,
-    emissive: type==='big' ? 0x220000 : type==='exploder' ? 0x441000 : 0x000000,
-    emissiveIntensity: type==='exploder' ? 0.35 : 0.2 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0x6e7a48, roughness: 0.95 });
-  const eyeMat = new THREE.MeshBasicMaterial({ color: spec.eyeColor });
-  const bloodMat = new THREE.MeshStandardMaterial({ color: 0x5a0a0a, roughness: 0.4, metalness: 0.1, emissive: 0x4a0808, emissiveIntensity: 0.4 });
+  const bodyMat = tmat(pal.body, type==='exploder' ? { emissive: 0x441000, emissiveIntensity: 0.35 } : (type==='big' ? { emissive: 0x220000, emissiveIntensity: 0.2 } : {}));
+  const darkMat = tmat(pal.dark);
+  const skinMat = tmat(pal.skin);
+  const eyeMat  = new THREE.MeshBasicMaterial({ color: spec.eyeColor });
+  const bloodMat = tmat(0x6a0a0a, { emissive: 0x4a0808, emissiveIntensity: 0.5 });
 
-  const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.13*s, 0.15*s, 0.7*s, 7), bodyMat);
-  legL.position.set(-0.15*s, 0.4*s, 0); legL.castShadow = true; g.add(legL);
-  const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.13*s, 0.15*s, 0.7*s, 7), bodyMat);
-  legR.position.set(0.15*s, 0.4*s, 0.04*s); legR.rotation.x = -0.15; legR.castShadow = true; g.add(legR);
+  // ─ Stubby legs ─
+  const legGeo = new THREE.CylinderGeometry(0.17*s, 0.15*s, 0.45*s, 9);
+  const legL = outline(new THREE.Mesh(legGeo, darkMat), 1.07);
+  legL.position.set(-0.17*s, 0.32*s, 0); legL.castShadow = !IS_MOBILE; g.add(legL);
+  const legR = outline(new THREE.Mesh(legGeo, darkMat), 1.07);
+  legR.position.set( 0.17*s, 0.32*s, 0); legR.castShadow = !IS_MOBILE; g.add(legR);
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32*s, 0.5*s, 4, 8), bodyMat);
-  torso.position.set(0, 1.0*s, -0.08*s); torso.rotation.x = 0.25; torso.castShadow = true; g.add(torso);
+  // ─ Squat hunched torso ─
+  const torsoGeo = new THREE.CapsuleGeometry(0.36*s, 0.42*s, 4, 10);
+  const torso = outline(new THREE.Mesh(torsoGeo, bodyMat), 1.05);
+  torso.position.set(0, 0.85*s, -0.08*s); torso.rotation.x = 0.22; torso.castShadow = !IS_MOBILE;
+  g.add(torso);
+  // Tattered shirt detail (rib stripes)
+  for (let i = 0; i < 3; i++) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4*s, 0.04*s, 0.04*s), darkMat);
+    stripe.position.set(0, (0.75 + i*0.1)*s, 0.28*s); g.add(stripe);
+  }
+  // Wound — pulsing red gash
+  const wound = new THREE.Mesh(new THREE.CircleGeometry(0.18*s, 14), bloodMat);
+  wound.position.set(0.2*s, 0.92*s, 0.3*s); wound.rotation.y = Math.PI/2; g.add(wound);
 
-  const wound = new THREE.Mesh(new THREE.CircleGeometry(0.16*s, 12), bloodMat);
-  wound.position.set(0.18*s, 1.05*s, 0.25*s); wound.rotation.y = Math.PI/2; g.add(wound);
+  // ─ Chunky arms (raised forward) ─
+  const armGeo = new THREE.CapsuleGeometry(0.13*s, 0.48*s, 4, 8);
+  const armL = outline(new THREE.Mesh(armGeo, bodyMat), 1.06);
+  armL.position.set(-0.42*s, 0.96*s, -0.42*s); armL.rotation.x = -1.0; armL.rotation.z = 0.22;
+  armL.castShadow = !IS_MOBILE; g.add(armL);
+  const armR = outline(new THREE.Mesh(armGeo, bodyMat), 1.06);
+  armR.position.set( 0.42*s, 0.96*s, -0.42*s); armR.rotation.x = -1.0; armR.rotation.z = -0.22;
+  armR.castShadow = !IS_MOBILE; g.add(armR);
 
-  const armGeo = new THREE.CapsuleGeometry(0.11*s, 0.55*s, 4, 6);
-  const armL = new THREE.Mesh(armGeo, bodyMat);
-  armL.position.set(-0.4*s, 1.05*s, -0.45*s); armL.rotation.x = -1.0; armL.rotation.z = 0.2; armL.castShadow = true; g.add(armL);
-  const armR = new THREE.Mesh(armGeo, bodyMat);
-  armR.position.set(0.4*s, 1.05*s, -0.45*s); armR.rotation.x = -1.0; armR.rotation.z = -0.2; armR.castShadow = true; g.add(armR);
-  const handGeo = new THREE.BoxGeometry(0.13*s, 0.13*s, 0.18*s);
-  const handL = new THREE.Mesh(handGeo, skinMat); handL.position.set(-0.42*s, 0.9*s, -0.9*s); g.add(handL);
-  const handR = new THREE.Mesh(handGeo, skinMat); handR.position.set(0.42*s, 0.9*s, -0.9*s); g.add(handR);
+  // ─ Oversized clawed hands ─
+  const handGeo = new THREE.BoxGeometry(0.2*s, 0.18*s, 0.22*s);
+  const handL = outline(new THREE.Mesh(handGeo, skinMat), 1.06);
+  handL.position.set(-0.5*s, 0.78*s, -0.92*s); g.add(handL);
+  const handR = outline(new THREE.Mesh(handGeo, skinMat), 1.06);
+  handR.position.set( 0.5*s, 0.78*s, -0.92*s); g.add(handR);
+  // Claws (3 per hand)
+  const clawMat = new THREE.MeshBasicMaterial({ color: 0xede5c0 });
+  for (const hx of [-0.5, 0.5]) {
+    for (let c = 0; c < 3; c++) {
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.028*s, 0.13*s, 6), clawMat);
+      claw.position.set((hx + (c-1)*0.06) * s, 0.74*s, -1.08*s);
+      claw.rotation.x = Math.PI; g.add(claw);
+    }
+  }
 
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.1*s, 0.13*s, 0.18*s, 6), skinMat);
-  neck.position.set(0, 1.42*s, -0.04*s); neck.rotation.x = 0.35; g.add(neck);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.25*s, 14, 10), skinMat);
-  head.position.set(0, 1.58*s, -0.16*s); head.rotation.x = 0.3; head.castShadow = true; g.add(head);
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.18*s, 0.08*s, 0.18*s),
-    new THREE.MeshStandardMaterial({ color: 0x301a1a, roughness: 0.6 }));
-  jaw.position.set(0, 1.46*s, -0.32*s); g.add(jaw);
+  // ─ Neck stub + BIG head (chibi) ─
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13*s, 0.16*s, 0.16*s, 8), skinMat);
+  neck.position.set(0, 1.2*s, -0.04*s); neck.rotation.x = 0.3; g.add(neck);
+  const head = outline(new THREE.Mesh(new THREE.SphereGeometry(0.32*s, 18, 14), skinMat), 1.05);
+  head.position.set(0, 1.42*s, -0.18*s); head.rotation.x = 0.3;
+  head.castShadow = !IS_MOBILE; g.add(head);
+
+  // ─ Gaping jaw with teeth ─
+  const jaw = outline(new THREE.Mesh(new THREE.BoxGeometry(0.26*s, 0.12*s, 0.22*s), tmat(0x2a1010)), 1.06);
+  jaw.position.set(0, 1.3*s, -0.38*s); g.add(jaw);
   for (let i = -1; i <= 1; i++) {
-    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.02*s, 0.06*s, 4),
-      new THREE.MeshStandardMaterial({ color: 0xddddcc }));
-    tooth.position.set(i*0.06*s, 1.5*s, -0.39*s); tooth.rotation.x = Math.PI; g.add(tooth);
-  }
-  for (const dx of [-0.08, 0.08]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045*s, 8, 6), eyeMat);
-    eye.position.set(dx*s, 1.6*s, -0.34*s); g.add(eye);
-  }
-  for (const dx of [-0.08, 0.08]) {
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.09*s, 8, 6),
-      new THREE.MeshBasicMaterial({ color: spec.eyeColor, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
-    halo.position.set(dx*s, 1.6*s, -0.34*s); g.add(halo);
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.03*s, 0.09*s, 5), clawMat);
+    tooth.position.set(i*0.09*s, 1.36*s, -0.49*s); tooth.rotation.x = Math.PI; g.add(tooth);
   }
 
-  // Exploder: glowing chest (bomb)
+  // ─ Glowing eyes (signature) ─
+  for (const dx of [-0.11, 0.11]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06*s, 10, 8), eyeMat);
+    eye.position.set(dx*s, 1.48*s, -0.4*s); g.add(eye);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.13*s, 10, 8),
+      new THREE.MeshBasicMaterial({ color: spec.eyeColor, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.position.set(dx*s, 1.48*s, -0.4*s); g.add(halo);
+  }
+
+  // ─ Type-specific silhouette ─
   let bomb = null;
   if (type === 'exploder') {
-    bomb = new THREE.Mesh(new THREE.SphereGeometry(0.22*s, 16, 12),
+    // Glowing belly bomb
+    bomb = new THREE.Mesh(new THREE.SphereGeometry(0.28*s, 18, 14),
       new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending }));
-    bomb.position.set(0, 1.05*s, 0.18*s);
-    g.add(bomb);
-    const innerLight = new THREE.PointLight(0xff4400, 1.0, 4, 2);
-    innerLight.position.set(0, 1.05*s, 0.18*s);
-    g.add(innerLight);
-    bomb.userData.light = innerLight;
+    bomb.position.set(0, 0.92*s, 0.22*s); g.add(bomb);
+    const inner = new THREE.PointLight(0xff4400, 1.0, 4, 2);
+    inner.position.set(0, 0.92*s, 0.22*s); g.add(inner);
+    bomb.userData.light = inner;
+    // Detonator antenna
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02*s, 0.02*s, 0.18*s, 6), darkMat);
+    ant.position.set(0, 1.0*s, 0.4*s); g.add(ant);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.04*s, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff8800 }));
+    ball.position.set(0, 1.1*s, 0.42*s); g.add(ball);
   }
-
-  // Spitter: distended jaw / glowing throat
   if (type === 'spitter') {
-    const sac = new THREE.Mesh(new THREE.SphereGeometry(0.18*s, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0x88ff44, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
-    sac.position.set(0, 1.36*s, -0.28*s);
-    g.add(sac);
-    bomb = sac; // reuse slot for animation hook
+    // Bulbous toxic throat sac
+    const sac = new THREE.Mesh(new THREE.SphereGeometry(0.22*s, 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0x88ff44, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending }));
+    sac.position.set(0, 1.2*s, -0.32*s); g.add(sac);
+    bomb = sac;
+    // Dripping fangs (oversized for spitter)
+    const fang = new THREE.Mesh(new THREE.ConeGeometry(0.04*s, 0.12*s, 6),
+      new THREE.MeshBasicMaterial({ color: 0xc4ff66 }));
+    fang.position.set(0, 1.3*s, -0.55*s); fang.rotation.x = Math.PI; g.add(fang);
+  }
+  if (type === 'big') {
+    // Spiked back armor (BRUTE silhouette)
+    for (let i = 0; i < 5; i++) {
+      const spike = outline(new THREE.Mesh(new THREE.ConeGeometry(0.1*s, 0.32*s, 6), darkMat), 1.06);
+      spike.position.set((i-2)*0.13*s, 1.05*s, 0.28*s);
+      spike.rotation.x = Math.PI - 0.4; g.add(spike);
+    }
+    // Heavy shoulder armor pads
+    for (const sx of [-0.45, 0.45]) {
+      const pad = outline(new THREE.Mesh(new THREE.SphereGeometry(0.22*s, 12, 10), darkMat), 1.05);
+      pad.position.set(sx*s, 1.15*s, -0.04*s); g.add(pad);
+    }
+    // Glowing red eyes get bigger halo
+  }
+  if (type === 'fast') {
+    // Sinewy stripes (runner)
+    for (const sx of [-0.28, 0.28]) {
+      const sinew = new THREE.Mesh(new THREE.BoxGeometry(0.03*s, 0.4*s, 0.04*s),
+        new THREE.MeshBasicMaterial({ color: 0xff5060 }));
+      sinew.position.set(sx*s, 0.88*s, 0.3*s); g.add(sinew);
+    }
   }
 
   return { g, legL, legR, armL, armR, bomb };
@@ -1729,6 +1961,7 @@ function explodeZombie(z) {
     if (d < r) {
       const falloff = 1 - d/r;
       p.hp -= spec.explodeDmg * falloff;
+      p.hitT = 0.16;
       p.lastHitT = state.t;
       if (p.hp <= 0) { p.hp = 0; p.alive = false; }
       const pIdx = state.players.indexOf(p);
@@ -1743,6 +1976,7 @@ function explodeZombie(z) {
     if (d < r) {
       const falloff = 1 - d/r;
       other.hp -= 30 * falloff;
+      other.hitT = 0.14;
       if (other.hp <= 0 && other.alive) {
         other.alive = false; other.deathT = 0.001;
         state.score += Math.floor(ZTYPE[other.type].score * 0.5); // less for chain kill
@@ -1853,6 +2087,7 @@ function zombieAI(dt) {
         z.attackCD = spec.attackInt;
         z.lungeT = 1.0;
         best.hp -= spec.dmg;
+        best.hitT = 0.16;
         best.lastHitT = state.t;
         if (best.hp <= 0) { best.hp = 0; best.alive = false; }
         const pIdx = state.players.indexOf(best);
@@ -1925,6 +2160,7 @@ function simulate(dt) {
       if (r.hit === 'zombie') {
         const dmg = BASE_BULLET_DAMAGE * (p.pwDmg > 0 ? 2 : 1);
         r.zombie.hp -= dmg;
+        r.zombie.hitT = 0.14;
         if (r.zombie.hp <= 0 && r.zombie.alive) {
           r.zombie.alive = false; r.zombie.deathT = 0.001;
           // combo increment
@@ -1964,6 +2200,7 @@ function simulate(dt) {
       const dx = p.x - pr.x, dz = p.z - pr.z;
       if (dx*dx + dz*dz < 0.5*0.5) {
         p.hp -= pr.dmg;
+        p.hitT = 0.16;
         p.lastHitT = state.t;
         if (p.hp <= 0) { p.hp = 0; p.alive = false; }
         const pIdx = state.players.indexOf(p);
@@ -2331,23 +2568,40 @@ function syncPlayerMeshes(dt) {
     pm.g.visible = p.alive;
     pm.g.position.x = p.x; pm.g.position.z = p.z;
     pm.g.rotation.y = p.a;
-    const swing = Math.sin(p.walkPhase) * 0.35;
+    // Walk cycle with idle bob
+    const moving = (p.vx*p.vx + p.vz*p.vz) > 0.01;
+    const swing = Math.sin(p.walkPhase) * 0.45;
     pm.legL.rotation.x = swing;
     pm.legR.rotation.x = -swing;
+    // Idle/move body bob (subtle vertical breathing)
+    const bobAmp = moving ? 0.06 : 0.025;
+    const bobFreq = moving ? 10 : 2.4;
+    pm.g.position.y = Math.abs(Math.sin(state.t * bobFreq + i * 0.7)) * bobAmp;
+    // Hit squash when player takes damage (p.hitT set on hit)
+    if ((p.hitT || 0) > 0) {
+      const hk = p.hitT / 0.16;
+      pm.g.scale.set(1 + hk * 0.16, 1 - hk * 0.1, 1 + hk * 0.04);
+      p.hitT = Math.max(0, p.hitT - dt);
+    } else if (pm.g.scale.x !== 1) {
+      pm.g.scale.set(1, 1, 1);
+    }
     const t = muzzleFlashTimer[i];
     if (t > 0) {
       const k = Math.min(1, t / 0.08);
-      pm.flash.material.opacity = k * 0.9;
+      pm.flash.material.opacity = k * 1.0;
       pm.flashCore.material.opacity = k;
-      pm.flash.scale.setScalar(1 + (1 - k) * 0.5);
-      pm.muzzleLight.intensity = k * 4.5;
-      pm.rifleGrp.position.z = -0.18 + (1 - k) * 0.05;
+      pm.flash.scale.setScalar(1 + (1 - k) * 0.6);
+      pm.muzzleLight.intensity = k * 5.5;
+      // Punchier recoil: kick back farther + tilt up
+      pm.rifleGrp.position.z = -0.18 + (1 - k) * 0.14;
+      pm.rifleGrp.rotation.x = -(1 - k) * 0.18;
       muzzleFlashTimer[i] = Math.max(0, t - dt);
     } else {
       pm.flash.material.opacity = 0;
       pm.flashCore.material.opacity = 0;
       pm.muzzleLight.intensity = 0;
       pm.rifleGrp.position.z = -0.18;
+      pm.rifleGrp.rotation.x = 0;
     }
     // aura
     let auraOp = 0, auraColor = 0xffffff;
@@ -2402,6 +2656,14 @@ function syncZombieMeshes(dt) {
     const lungeOffset = (z.lungeT || 0) * 0.45;
     info.g.position.x += Math.sin(z.a) * lungeOffset;
     info.g.position.z += -Math.cos(z.a) * lungeOffset;
+    // Hit squash (Brawl-style punchy reaction)
+    if ((z.hitT || 0) > 0) {
+      const hk = z.hitT / 0.14;
+      info.g.scale.set(1 + hk * 0.22, 1 - hk * 0.14, 1 + hk * 0.06);
+      z.hitT = Math.max(0, z.hitT - dt);
+    } else if (info.g.scale.x !== 1) {
+      info.g.scale.set(1, 1, 1);
+    }
     // exploder pulse
     if (z.type === 'exploder' && info.parts.bomb) {
       const p = 0.7 + Math.sin(state.t * 10 + z.id) * 0.3;
