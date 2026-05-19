@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's17-layouts';
+const BUILD = 's18-ai-hitstop';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -784,6 +784,10 @@ function spawnZombie(type) {
   const aim = Math.atan2(-x, z); // face roughly toward center
   meshInfo.g.rotation.y = aim;
   scene.add(meshInfo.g);
+  // AI pattern assignment
+  let aiPattern = 'direct';
+  if (type === 'runner')  aiPattern = Math.random() < 0.65 ? 'flank' : 'direct';
+  if (type === 'spitter') aiPattern = 'kite';
   G.zombies.push({
     id: Math.random().toString(36).slice(2, 8),
     type, x, z, a: 0, vx: 0, vz: 0,
@@ -792,6 +796,9 @@ function spawnZombie(type) {
     walkPhase: Math.random() * 10,
     attackCD: 0, lungeT: 0, hitT: 0,
     spitCD: 1 + Math.random(),
+    aiPattern,
+    flankSign: Math.random() < 0.5 ? 1 : -1,   // which side to flank from
+    flankT: 3.5 + Math.random() * 2.5,         // how long flank-mode lasts before charging
     mesh: meshInfo,
   });
   // Brute entry: shockwave + camera shake
@@ -1071,6 +1078,9 @@ function killZombie(z, ownerIdx) {
   }
   pendingEvents.push({ t: 'kill', x: z.x, z: z.z, s: earned, cb: p ? p.combo : 1 });
   ensureAudio(); audio.kill?.();
+  // Heavy hits feel weighty — brief slow-mo
+  if (z.type === 'brute')  hitStop(0.12);
+  else if (z.type === 'bomber') hitStop(0.05);
   // Drop pickup chance (modified by wave event)
   if (Math.random() < PICKUP_DROP * (G.dropMult || 1) * (z.type === 'brute' ? 4 : 1)) {
     const types = ['hp', 'dmg', 'rapid', 'shotgun', 'shield'];
@@ -1215,6 +1225,7 @@ function triggerSuper(p) {
   pendingEvents.push({ t: 'super', x: p.x, z: p.z });
   ensureAudio(); audio.super?.();
   vib(120);
+  hitStop(0.16);  // super = strong impact freeze
 }
 
 // ─── ZOMBIE AI ──────────────────────────────────────────────
@@ -1256,19 +1267,26 @@ function updateZombies(dt) {
     z.a = Math.atan2(dxT, -dzT);
 
     if (spec.ranged) {
-      // Spitter: ranged attack
-      if (d > spec.atkR * 0.6) {
-        // Approach within range
-        const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
-        z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
-        z.z += nz * spec.spd * (G.zSpdMult || 1) * dt;
+      // SPITTER — KITE pattern: keep preferred distance, back off if too close
+      const preferredD = 9.0, buffer = 1.5;
+      const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
+      const sMult = (G.zSpdMult || 1);
+      if (d > preferredD + buffer) {
+        // Approach
+        z.x += nx * spec.spd * sMult * dt;
+        z.z += nz * spec.spd * sMult * dt;
         z.walkPhase += dt * spec.spd * 2;
+      } else if (d < preferredD - buffer) {
+        // Back away
+        z.x -= nx * spec.spd * 0.85 * sMult * dt;
+        z.z -= nz * spec.spd * 0.85 * sMult * dt;
+        z.walkPhase += dt * spec.spd * 1.5;
       }
+      // Spit
       z.spitCD -= dt;
       if (z.spitCD <= 0 && d < spec.atkR) {
         z.spitCD = spec.atkInt + Math.random() * 0.5;
-        const sx = dxT / Math.max(d, 0.001), sz = dzT / Math.max(d, 0.001);
-        spawnProjectile(z.x, z.z, sx, sz, spec.projSpd, spec.projDmg, 0xc0ff60, true, 2.0);
+        spawnProjectile(z.x, z.z, nx, nz, spec.projSpd, spec.projDmg, 0xc0ff60, true, 2.0);
         z.lungeT = 0.8;
       }
     } else if (spec.explodes) {
@@ -1284,11 +1302,24 @@ function updateZombies(dt) {
         bombExplode(z);
       }
     } else {
-      // Melee zombie (brute does AOE slam, others do single-target lunge)
+      // Melee zombie (brute does AOE slam, runner can flank, others charge straight)
       if (d > spec.atkR) {
-        const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
-        z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
-        z.z += nz * spec.spd * (G.zSpdMult || 1) * dt;
+        let nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
+        const sMult = (G.zSpdMult || 1);
+        // FLANK pattern: bias velocity toward a perpendicular offset for ~3-6s, then commit straight
+        if (z.aiPattern === 'flank' && z.flankT > 0) {
+          z.flankT -= dt;
+          // Perpendicular (right-hand) of player direction
+          const px = -nz * z.flankSign, pz = nx * z.flankSign;
+          // Blend perpendicular into approach for arc-style attack
+          const fadeIn = Math.min(1, z.flankT / 1.0);  // strong flank until last 1s, then taper
+          nx = nx * (1 - 0.55 * fadeIn) + px * 0.85 * fadeIn;
+          nz = nz * (1 - 0.55 * fadeIn) + pz * 0.85 * fadeIn;
+          const ln = Math.hypot(nx, nz);
+          if (ln > 0.001) { nx /= ln; nz /= ln; }
+        }
+        z.x += nx * spec.spd * sMult * dt;
+        z.z += nz * spec.spd * sMult * dt;
         z.walkPhase += dt * spec.spd * 2;
       } else {
         z.attackCD -= dt;
@@ -2581,10 +2612,23 @@ useItem = function (slot) {
 // ============================================================
 const amAuthoritative = () => !G.isCoop || isHost;
 
+// Hit-stop: brief slow-mo for impactful moments (solo only — would desync coop)
+let hitStopT = 0;
+function hitStop(seconds) {
+  if (G.isCoop) return;
+  hitStopT = Math.max(hitStopT, seconds);
+}
+
 let prevT = performance.now();
 function loop(now) {
-  const dt = Math.min(0.05, (now - prevT) / 1000);
+  let dt = Math.min(0.05, (now - prevT) / 1000);
   prevT = now;
+  // Apply slow-mo if hit-stop is active
+  if (hitStopT > 0) {
+    const consumed = Math.min(dt, hitStopT);
+    hitStopT -= consumed;
+    dt = dt * 0.12;
+  }
   // Atmospheric dust always animates (cheap)
   updateDust(dt);
   if (G.phase === 'menu') {
