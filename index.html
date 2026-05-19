@@ -802,6 +802,14 @@ html, body {
 #lowHp.on { opacity: 1; animation: lowHpPulse 1.4s ease-in-out infinite; }
 @keyframes lowHpPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
 
+#whiteFlash {
+  position: absolute; inset: 0; z-index: 17;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.95) 0%, rgba(255,240,200,0.6) 60%, transparent 100%);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.32s ease-out;
+}
+#whiteFlash.on { opacity: 1; transition: opacity 0s; }
+
 </style>
 <script type="importmap">
 { "imports": {
@@ -902,6 +910,7 @@ html, body {
 
     <div id="dmgFlash"></div>
     <div id="lowHp"></div>
+    <div id="whiteFlash"></div>
     <button id="pauseBtn" aria-label="Pause">⏸</button>
   </div>
 

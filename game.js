@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's18-ai-hitstop';
+const BUILD = 's19-impact';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -976,11 +976,13 @@ function _releaseBullet(b) {
 }
 function spawnBullet(x, z, dx, dz, dmg, ownerIdx, crit, color = 0xffe27a) {
   const slot = _getBulletSlot();
-  if (!slot) return; // pool exhausted — drop the shot
+  if (!slot) return;
   slot.active = true;
   slot.mesh.core.material.color.setHex(color);
   slot.mesh.trail.material.color.setHex(color);
   slot.mesh.g.position.set(x, 1.0, z);
+  slot.mesh.g.rotation.y = Math.atan2(dx, -dz);  // align with travel
+  slot.mesh.g.scale.set(1, 1, 2.1);              // stretch along Z for streak look
   slot.mesh.g.visible = true;
   G.bullets.push({
     poolRef: slot,
@@ -998,6 +1000,8 @@ function spawnProjectile(x, z, dx, dz, speed, dmg, color, hostile, life) {
   slot.mesh.core.material.color.setHex(color);
   slot.mesh.trail.material.color.setHex(color);
   slot.mesh.g.position.set(x, 1.3, z);
+  slot.mesh.g.rotation.y = Math.atan2(dx, -dz);
+  slot.mesh.g.scale.set(1, 1, 1.8);
   slot.mesh.g.visible = true;
   G.bullets.push({
     poolRef: slot,
@@ -1078,9 +1082,17 @@ function killZombie(z, ownerIdx) {
   }
   pendingEvents.push({ t: 'kill', x: z.x, z: z.z, s: earned, cb: p ? p.combo : 1 });
   ensureAudio(); audio.kill?.();
-  // Heavy hits feel weighty — brief slow-mo
-  if (z.type === 'brute')  hitStop(0.12);
-  else if (z.type === 'bomber') hitStop(0.05);
+  // Heavy hits feel weighty — brief slow-mo + flash + camera punch
+  if (z.type === 'brute') {
+    hitStop(0.12);
+    whiteFlash();
+    camPunch(0.28);
+    // Extra shockwave + big particle burst
+    spawnExplosion(z.x, 0.3, z.z, 5.2);
+    spawnHitParticles(z.x, 1.2, z.z, 0xff5a3a, 32);
+  } else if (z.type === 'bomber') {
+    hitStop(0.05);
+  }
   // Drop pickup chance (modified by wave event)
   if (Math.random() < PICKUP_DROP * (G.dropMult || 1) * (z.type === 'brute' ? 4 : 1)) {
     const types = ['hp', 'dmg', 'rapid', 'shotgun', 'shield'];
@@ -1225,7 +1237,12 @@ function triggerSuper(p) {
   pendingEvents.push({ t: 'super', x: p.x, z: p.z });
   ensureAudio(); audio.super?.();
   vib(120);
-  hitStop(0.16);  // super = strong impact freeze
+  hitStop(0.16);
+  whiteFlash();
+  camPunch(0.4);
+  // Extra explosion ring + particle burst
+  spawnHitParticles(p.x, 1.0, p.z, 0xffd540, 40);
+  spawnHitParticles(p.x, 0.5, p.z, 0xff7028, 30);
 }
 
 // ─── ZOMBIE AI ──────────────────────────────────────────────
@@ -1498,6 +1515,26 @@ function updateCamera(dt) {
     camera.position.x += (Math.random() - 0.5) * shakeAmt * 0.5;
     camera.position.y += (Math.random() - 0.5) * shakeAmt * 0.3;
     shakeAmt = Math.max(0, shakeAmt - dt * 3);
+  }
+  // Punch zoom: temporary view-size shrink for impactful moments
+  if (camPunchT > 0) {
+    camPunchT = Math.max(0, camPunchT - dt);
+    const k = Math.min(1, camPunchT / 0.32);
+    const baseView = IS_MOBILE ? 17 : 19;
+    const view = baseView - k * 2.6;
+    const aspect = window.innerWidth / window.innerHeight;
+    camera.left = -view * aspect; camera.right = view * aspect;
+    camera.top = view; camera.bottom = -view;
+    camera.updateProjectionMatrix();
+  } else if (camera.left !== -(IS_MOBILE ? 17 : 19) * (window.innerWidth / window.innerHeight)) {
+    // Restore default view bounds once punch fully decayed
+    const baseView = IS_MOBILE ? 17 : 19;
+    const aspect = window.innerWidth / window.innerHeight;
+    if (Math.abs(camera.top - baseView) > 0.01) {
+      camera.left = -baseView * aspect; camera.right = baseView * aspect;
+      camera.top = baseView; camera.bottom = -baseView;
+      camera.updateProjectionMatrix();
+    }
   }
   camera.lookAt(CAM_TARGET.x, 0, CAM_TARGET.z);
 }
@@ -2190,6 +2227,8 @@ function applyEvent(e) {
       slot.mesh.core.material.color.setHex(e.c || 0xffe27a);
       slot.mesh.trail.material.color.setHex(e.c || 0xffe27a);
       slot.mesh.g.position.set(e.x, 1.0, e.z);
+      slot.mesh.g.rotation.y = Math.atan2(e.dx, -e.dz);
+      slot.mesh.g.scale.set(1, 1, 2.1);
       slot.mesh.g.visible = true;
       G.bullets.push({
         poolRef: slot,
@@ -2618,6 +2657,18 @@ function hitStop(seconds) {
   if (G.isCoop) return;
   hitStopT = Math.max(hitStopT, seconds);
 }
+
+// White screen flash (super, brute death) — pure UI effect
+const whiteFlashEl = document.getElementById('whiteFlash');
+function whiteFlash() {
+  if (!whiteFlashEl) return;
+  whiteFlashEl.classList.add('on');
+  setTimeout(() => whiteFlashEl.classList.remove('on'), 60);
+}
+
+// Camera punch zoom (brief view-size shrink)
+let camPunchT = 0;
+function camPunch(seconds) { camPunchT = Math.max(camPunchT, seconds); }
 
 let prevT = performance.now();
 function loop(now) {
