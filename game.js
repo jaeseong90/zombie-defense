@@ -23,7 +23,7 @@ const IS_MOBILE =
 function saveBest() { return _saveBest(G.score, G.wave, G.kills); }
 
 // Build version (shown on menu)
-const BUILD = 's21-detail';
+const BUILD = 's22-radar';
 const buildEl = document.getElementById('menuBuild');
 if (buildEl) buildEl.textContent = BUILD;
 
@@ -1234,8 +1234,73 @@ function useItemForPlayer(p, slot) {
   } else {
     p[spec.key] = Math.max(p[spec.key] || 0, spec.dur);
   }
+  // Floating popup ONLY for local player using item
+  if (p.idx === G.myIdx) {
+    const txt = spec.instant ? `${spec.icon} ${spec.name}` : `${spec.icon} ${spec.name} +${spec.dur}s`;
+    showPickupPopup(txt);
+  }
   p.inv[slot] = null;
   if (slot === 0) p.inv0Dirty = true; else p.inv1Dirty = true;
+}
+
+// Pickup activation popup (centered above super btn)
+function showPickupPopup(text) {
+  const el = document.createElement('div');
+  el.className = 'pickupPopup';
+  el.textContent = text;
+  hudEl.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+}
+
+// ─── Off-screen zombie radar arrows ─────────────────────────
+const RADAR_POOL_N = 8;
+const radarPool = [];
+const _radarV = new THREE.Vector3();
+function _ensureRadarPool() {
+  if (radarPool.length) return;
+  for (let i = 0; i < RADAR_POOL_N; i++) {
+    const el = document.createElement('div');
+    el.className = 'radarArrow';
+    el.innerHTML = '<div class="tri"></div>';
+    hudEl.appendChild(el);
+    radarPool.push(el);
+  }
+}
+function updateRadar() {
+  _ensureRadarPool();
+  let idx = 0;
+  // Sort by danger (brute > spitter > bomber > others)
+  const dangerRank = { brute: 5, spitter: 4, bomber: 3, runner: 2, walker: 1 };
+  const sorted = G.zombies
+    .filter(z => z.alive)
+    .sort((a, b) => (dangerRank[b.type] || 0) - (dangerRank[a.type] || 0));
+  for (const z of sorted) {
+    _radarV.set(z.x, 1.0, z.z).project(camera);
+    if (_radarV.z > 1) continue; // behind camera
+    if (Math.abs(_radarV.x) < 1.02 && Math.abs(_radarV.y) < 1.02) continue; // on screen
+    if (idx >= RADAR_POOL_N) break;
+    const el = radarPool[idx++];
+    const margin = 0.94;
+    const x = Math.max(-margin, Math.min(margin, _radarV.x));
+    const y = Math.max(-margin, Math.min(margin, _radarV.y));
+    const sx = (x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-y * 0.5 + 0.5) * window.innerHeight;
+    el.style.left  = (sx - 9) + 'px';
+    el.style.top   = (sy - 9) + 'px';
+    // Direction from screen center to zombie (atan2 in screen coords with Y-flipped)
+    const angle = Math.atan2(-y, x);  // 0 = +X, PI/2 = +Y (down in CSS)
+    // Rotate triangle (default points UP) so it points along the angle.
+    // Triangle "up" is 0deg → we want it to point at the zombie. CSS rotation positive = clockwise.
+    // CSS angle 0 = right (since triangle points up by default we add -90 to align)
+    el.style.transform = `rotate(${(angle * 180 / Math.PI - 90)}deg)`;
+    el.style.color = z.type === 'brute' ? '#ff3a4a'
+                   : z.type === 'spitter' ? '#88ff44'
+                   : z.type === 'bomber'  ? '#ff7028'
+                   : z.type === 'runner'  ? '#ff8b8b'
+                   : '#cad97a';
+    el.style.display = 'block';
+  }
+  for (let i = idx; i < RADAR_POOL_N; i++) radarPool[i].style.display = 'none';
 }
 function useItem(slot) {
   useItemForPlayer(G.players[G.myIdx], slot);
@@ -2799,6 +2864,7 @@ function loop(now) {
     syncPickupMeshes(dt);
     if (G.phase !== 'shop') updateCamera(dt);
     updateHUD(dt);
+    if (G.phase === 'play') updateRadar();
   } else if (paused) {
     // While paused: still send heartbeat network state so peer doesn't desync hard
     if (G.isCoop && connected && (now - netLastSend) > 1000 / NET_HZ_NUM) {

@@ -412,6 +412,51 @@ html, body {
 #waveTint.hospital { background: radial-gradient(circle at 50% 50%, rgba(120,255,160,0.55), transparent 60%); }
 #waveTint.carnival { background: radial-gradient(circle at 50% 50%, rgba(255,120,160,0.6), transparent 60%); }
 
+/* Off-screen zombie radar arrows (clamped to screen edges) */
+.radarArrow {
+  position: absolute;
+  pointer-events: none;
+  z-index: 11;
+  width: 18px; height: 18px;
+  display: none;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.radarArrow .tri {
+  display: block;
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid currentColor;
+  transform-origin: 50% 60%;
+  margin: 0 auto;
+}
+
+/* Pickup use floating popup */
+.pickupPopup {
+  position: absolute; left: 50%; bottom: 175px;
+  transform: translateX(-50%);
+  pointer-events: none; z-index: 14;
+  background: linear-gradient(180deg, rgba(40,18,60,0.92), rgba(15,6,24,0.92));
+  border: 1px solid var(--accent-gold);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800; font-size: 12px;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent-gold);
+  text-shadow: 0 0 10px rgba(255,200,80,0.5);
+  box-shadow: 0 6px 18px rgba(255,90,40,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
+  animation: pickupPopAnim 1.4s ease-out forwards;
+  white-space: nowrap;
+}
+@keyframes pickupPopAnim {
+  0%   { opacity: 0; transform: translate(-50%, 18px) scale(0.7); }
+  12%  { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  20%  { transform: translate(-50%, 0) scale(1); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -28px) scale(0.92); }
+}
+
 /* Achievement / milestone toast (top-center, slides down) */
 #achievements {
   position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
