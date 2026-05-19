@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#06060c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Dead Corridor" />
+<meta name="screen-orientation" content="landscape" />
+<meta name="x5-orientation" content="landscape" />
+<meta name="full-screen" content="yes" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="apple-touch-icon" href="/icon.svg" />
 <title>DEAD CORRIDOR — 2P Co-op Defense</title>
 <style>
 :root {
@@ -471,7 +481,7 @@ html, body {
     <div id="menuTitle">
       <div class="pre">CO-OP DEFENSE</div>
       <h1>DEAD CORRIDOR</h1>
-      <div class="sub">15 · WAVES · 5 · ENEMY · TYPES</div>
+      <div class="sub">10 · WAVES · 5 · ENEMY · TYPES</div>
     </div>
 
     <p id="menuTagline">두 명이 등 맞대고 15웨이브를 막아내세요. 좌측 = 이동, 우측 = 조준 + 자동 사격. 좀비를 처치하면 픽업이 떨어집니다.</p>
@@ -509,7 +519,7 @@ html, body {
     <div id="topbar">
       <div class="hudPill wave" id="waveBox">
         <span class="icon">⚠</span>
-        <span><span class="num" id="waveNum">1</span><span class="total" id="waveTotal"> / 15</span></span>
+        <span><span class="num" id="waveNum">1</span><span class="total" id="waveTotal"> / 10</span></span>
         <span id="waveStatus" style="font-weight:500;opacity:0.7;margin-left:6px;">REMAIN 0</span>
       </div>
       <div class="hudPill score">
@@ -577,7 +587,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // ══════════════════════════════════════════════════════════
-//  DEAD CORRIDOR  —  2P Co-op Top-Down Defense (15 waves)
+//  DEAD CORRIDOR  —  2P Co-op Top-Down Defense (10 waves, ~10min)
 // ══════════════════════════════════════════════════════════
 
 // ─── Constants ─────────────────────────────────────────────
@@ -603,23 +613,18 @@ const ZTYPE = {
 
 const WAVES = [
   { regular: 5,  fast: 0, spitter: 0, exploder: 0, big: 0, desc: 'PREPARE FOR ASSAULT' },
-  { regular: 7,  fast: 2, spitter: 0, exploder: 0, big: 0, desc: 'THE HORDE GROWS' },
-  { regular: 8,  fast: 4, spitter: 0, exploder: 0, big: 0, desc: 'RUNNERS INCOMING' },
+  { regular: 7,  fast: 3, spitter: 0, exploder: 0, big: 0, desc: 'RUNNERS INCOMING' },
   { regular: 6,  fast: 4, spitter: 2, exploder: 0, big: 0, desc: 'SPITTERS DETECTED' },
-  { regular: 6,  fast: 3, spitter: 0, exploder: 0, big: 2, desc: 'BRUTE WARNING',  boss: true },
-  { regular: 8,  fast: 5, spitter: 2, exploder: 2, big: 0, desc: 'BOMBERS RUSHING' },
-  { regular: 6,  fast: 8, spitter: 3, exploder: 2, big: 0, desc: 'WATCH YOUR FLANKS' },
-  { regular: 10, fast: 6, spitter: 3, exploder: 2, big: 0, desc: 'TIGHTEN FORMATION' },
-  { regular: 8,  fast: 8, spitter: 4, exploder: 3, big: 0, desc: 'FULL ASSAULT' },
-  { regular: 8,  fast: 4, spitter: 2, exploder: 3, big: 3, desc: 'BRUTE PACK',     boss: true },
-  { regular: 8,  fast: 10,spitter: 4, exploder: 4, big: 0, desc: 'RELENTLESS' },
-  { regular: 6,  fast: 8, spitter: 6, exploder: 6, big: 0, desc: 'CHAOS UNLEASHED' },
-  { regular: 12, fast: 8, spitter: 4, exploder: 4, big: 1, desc: 'OVERRUN' },
-  { regular: 10, fast: 10,spitter: 6, exploder: 6, big: 2, desc: 'FRENZY' },
-  { regular: 12, fast: 12,spitter: 6, exploder: 6, big: 5, desc: 'FINAL STAND',    boss: true },
+  { regular: 5,  fast: 3, spitter: 2, exploder: 0, big: 2, desc: 'BRUTE WARNING',  boss: true },
+  { regular: 7,  fast: 5, spitter: 2, exploder: 2, big: 0, desc: 'BOMBERS RUSHING' },
+  { regular: 6,  fast: 7, spitter: 3, exploder: 3, big: 0, desc: 'WATCH YOUR FLANKS' },
+  { regular: 6,  fast: 5, spitter: 3, exploder: 2, big: 3, desc: 'BRUTE PACK',     boss: true },
+  { regular: 8,  fast: 8, spitter: 4, exploder: 4, big: 0, desc: 'CHAOS UNLEASHED' },
+  { regular: 10, fast: 8, spitter: 5, exploder: 4, big: 1, desc: 'OVERRUN' },
+  { regular: 8,  fast: 10,spitter: 5, exploder: 5, big: 4, desc: 'FINAL STAND',    boss: true },
 ];
-const SPAWN_INTERVAL = 0.45;
-const REST_TIME = 5.5;
+const SPAWN_INTERVAL = 0.40;
+const REST_TIME = 5.0;
 
 const COMBO_TIMEOUT = 3.2;
 const COMBO_MAX = 8;
@@ -630,7 +635,7 @@ const PICKUP = {
   damage_up:  { color: 0xb46bff, em: 0x6a2aff, name: 'DAMAGE x2' },
   rapid_fire: { color: 0xffeb3b, em: 0xffc107, name: 'RAPID FIRE' },
 };
-const PICKUP_DROP_CHANCE = 0.085;
+const PICKUP_DROP_CHANCE = 0.12;
 
 const MAP_WALLS = [
   { x: 0,        z: -ARENA/2, w: ARENA, d: 1.5, h: 2.6, mat: 'concrete' },
@@ -828,17 +833,22 @@ scene.fog = new THREE.FogExp2(0x0a0a14, 0.017);
 
 const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 220);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, canvas, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Detect low-end devices (small viewport OR coarse pointer = touch). Mobile gets cheaper shadows + lower DPR + softer bloom.
+const IS_MOBILE = matchMedia('(pointer: coarse)').matches || Math.min(window.innerWidth, window.innerHeight) < 600;
+const DPR_CAP = IS_MOBILE ? 1.5 : 2;
+const SHADOW_MAP_SIZE = IS_MOBILE ? 1024 : 2048;
+
+const renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, canvas, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, DPR_CAP));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.95;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.7, 0.42, 0.82);
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), IS_MOBILE ? 0.55 : 0.7, IS_MOBILE ? 0.55 : 0.42, 0.82);
 composer.addPass(bloom);
 const finalPass = new ShaderPass({
   uniforms: {
@@ -1036,7 +1046,7 @@ scene.add(new THREE.HemisphereLight(0x4a3a5a, 0x150810, 0.45));
 const moonDir = new THREE.DirectionalLight(0xff7050, 0.65);
 moonDir.position.set(-30, 50, -10);
 moonDir.castShadow = true;
-moonDir.shadow.mapSize.set(2048, 2048);
+moonDir.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
 moonDir.shadow.camera.left = -45; moonDir.shadow.camera.right = 45;
 moonDir.shadow.camera.top = 45;   moonDir.shadow.camera.bottom = -45;
 moonDir.shadow.camera.near = 1;   moonDir.shadow.camera.far = 120;
@@ -2296,7 +2306,7 @@ function updateHUD() {
 
   // win / lose
   if (state.phase === 'win') {
-    setBanner('🏆 VICTORY', '15 웨이브를 모두 클리어했습니다', '다시 시작', true, false);
+    setBanner('🏆 VICTORY', '10 웨이브를 모두 클리어했습니다', '다시 시작', true, false);
   } else if (state.phase === 'lose') {
     setBanner('💀 ELIMINATED', `웨이브 ${state.wave}에서 전멸`, '다시 시작', true, true);
   }
@@ -2575,13 +2585,36 @@ function startGame() {
   requestAnimationFrame(loop);
 }
 
-$('btnHost').onclick = startHost;
-$('btnJoin').onclick = startJoin;
-$('btnJoinConfirm').onclick = doJoin;
+async function enterImmersive() {
+  try {
+    const el = document.documentElement;
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      await el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    } else if (el.webkitRequestFullscreen && !document.webkitFullscreenElement) {
+      el.webkitRequestFullscreen();
+    }
+  } catch (e) {}
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (e) {}
+}
+
+$('btnHost').onclick = () => { enterImmersive(); startHost(); };
+$('btnJoin').onclick = () => { enterImmersive(); startJoin(); };
+$('btnJoinConfirm').onclick = () => { enterImmersive(); doJoin(); };
 $('btnHostBack').onclick = () => { menuMain.classList.remove('hidden'); menuHost.classList.add('hidden'); if (peer) { peer.destroy(); peer = null; } };
 $('btnJoinBack').onclick = () => { menuMain.classList.remove('hidden'); menuJoin.classList.add('hidden'); if (peer) { peer.destroy(); peer = null; } };
 joinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
 joinInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); });
+
+// Register service worker (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

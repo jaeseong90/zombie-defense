@@ -1,0 +1,28 @@
+{
+  "name": "Dead Corridor — 2P Co-op",
+  "short_name": "Dead Corridor",
+  "description": "Mobile landscape 2-player co-op zombie defense. 10 waves of survival.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#04050a",
+  "theme_color": "#06060c",
+  "lang": "ko",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}
