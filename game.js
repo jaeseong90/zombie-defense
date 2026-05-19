@@ -263,6 +263,77 @@ function makeWalls() {
 }
 makeWalls();
 
+// ─── Arena props (cover) ────────────────────────────────────
+const G_props = [];
+function makeBarrel(x, z) {
+  const g = new THREE.Group();
+  const body = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 0.95, 16), tmat(0x6a3a1c)), 1.04);
+  body.position.y = 0.475;
+  body.castShadow = !IS_MOBILE;
+  g.add(body);
+  // Two darker bands
+  for (const yy of [0.2, 0.75]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.08, 16), tmat(0x2a1810));
+    band.position.y = yy;
+    g.add(band);
+  }
+  const top = outlined(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 16), tmat(0x1f1208)), 1.04);
+  top.position.y = 0.98;
+  g.add(top);
+  // Glowing hazard rune
+  const rune = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff7028, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  rune.position.set(0, 0.5, 0.46); g.add(rune);
+  g.position.set(x, 0, z);
+  scene.add(g);
+  return { g, x, z, w: 0.45, d: 0.45, type: 'barrel' };
+}
+function makeCrate(x, z) {
+  const g = new THREE.Group();
+  const body = outlined(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), tmat(0x5a3a1c)), 1.04);
+  body.position.y = 0.45;
+  body.castShadow = !IS_MOBILE;
+  g.add(body);
+  // X reinforcement
+  const xmat = tmat(0x2a1810);
+  for (const ang of [Math.PI/4, -Math.PI/4]) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.4, 0.04), xmat);
+    slat.position.set(0, 0.45, 0.56); slat.rotation.z = ang;
+    g.add(slat);
+  }
+  // top frame
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.06, 1.15), xmat);
+  frame.position.y = 0.92; g.add(frame);
+  g.position.set(x, 0, z);
+  scene.add(g);
+  return { g, x, z, w: 0.55, d: 0.55, type: 'crate' };
+}
+function placeProps() {
+  const positions = [
+    [-9, -7, 'barrel'], [9, -8, 'crate'], [-10, 6, 'crate'], [11, 7, 'barrel'],
+    [-6, -12, 'crate'], [6, 11, 'barrel'], [-4, 9, 'barrel'], [4, -4, 'crate'],
+    [-12, 0, 'barrel'], [12, 0, 'barrel'],
+  ];
+  for (const [x, z, type] of positions) {
+    G_props.push(type === 'barrel' ? makeBarrel(x, z) : makeCrate(x, z));
+  }
+}
+placeProps();
+// AABB collide a circular entity (center x,z, radius r) against all props
+function collideProps(ent, r) {
+  for (const p of G_props) {
+    const dx = ent.x - p.x, dz = ent.z - p.z;
+    const ox = p.w + r, oz = p.d + r;
+    if (Math.abs(dx) < ox && Math.abs(dz) < oz) {
+      // Resolve along the shallower axis
+      const px = ox - Math.abs(dx);
+      const pz = oz - Math.abs(dz);
+      if (px < pz) ent.x += (dx > 0 ? px : -px);
+      else ent.z += (dz > 0 ? pz : -pz);
+    }
+  }
+}
+
 // ─── PLAYER MESH ─────────────────────────────────────────────
 function createPlayerMesh(idx) {
   const isP1 = idx === 0;
@@ -761,6 +832,7 @@ function updatePlayers(dt) {
     p.vz = inp.mvY * PLAYER_SPEED * p.speedMult;
     p.x = Math.max(-ARENA + 1, Math.min(ARENA - 1, p.x + p.vx * dt));
     p.z = Math.max(-ARENA + 1, Math.min(ARENA - 1, p.z + p.vz * dt));
+    collideProps(p, PLAYER_R);
     p.walkPhase += dt * Math.hypot(inp.mvX, inp.mvY) * 9;
 
     // Aim from aim joystick, fallback to movement direction
@@ -853,6 +925,18 @@ function updateBullets(dt) {
     b.mesh.g.position.set(b.x, b.y, b.z);
     // Out of arena or expired
     if (b.life <= 0 || Math.abs(b.x) > ARENA + 0.5 || Math.abs(b.z) > ARENA + 0.5) {
+      scene.remove(b.mesh.g);
+      G.bullets.splice(i, 1);
+      continue;
+    }
+    // Block by props (cover) — only at low-mid bullet height (which is 1.0)
+    let blocked = false;
+    for (const pr of G_props) {
+      const dx = b.x - pr.x, dz = b.z - pr.z;
+      if (Math.abs(dx) < pr.w + 0.1 && Math.abs(dz) < pr.d + 0.1) { blocked = true; break; }
+    }
+    if (blocked) {
+      spawnHitParticles(b.x, b.y, b.z, 0xffd070, 6);
       scene.remove(b.mesh.g);
       G.bullets.splice(i, 1);
       continue;
@@ -1118,7 +1202,7 @@ function updateZombies(dt) {
         bombExplode(z);
       }
     } else {
-      // Melee zombie
+      // Melee zombie (brute does AOE slam, others do single-target lunge)
       if (d > spec.atkR) {
         const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
         z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
@@ -1129,13 +1213,30 @@ function updateZombies(dt) {
         if (z.attackCD <= 0) {
           z.attackCD = spec.atkInt;
           z.lungeT = 1.0;
-          damagePlayer(target, spec.dmg);
+          if (z.type === 'brute') {
+            // Ground slam: AOE around brute
+            const R = spec.atkR * 1.8;
+            for (const pp of G.players) {
+              if (!pp.alive) continue;
+              const ddx = pp.x - z.x, ddz = pp.z - z.z;
+              const dd = Math.hypot(ddx, ddz);
+              if (dd < R) damagePlayer(pp, spec.dmg * (1 - dd / R * 0.4));
+            }
+            // Visual shockwave
+            spawnExplosion(z.x, 0.4, z.z, R);
+            shake(0.6);
+            ensureAudio(); audio.boom?.();
+            pendingEvents.push({ t: 'pop', x: z.x, z: z.z, r: R });
+          } else {
+            damagePlayer(target, spec.dmg);
+          }
         }
       }
     }
-    // Stay inside arena
+    // Stay inside arena + collide with props
     z.x = Math.max(-ARENA + 0.5, Math.min(ARENA - 0.5, z.x));
     z.z = Math.max(-ARENA + 0.5, Math.min(ARENA - 0.5, z.z));
+    collideProps(z, 0.45 * spec.sz);
 
     // Update mesh: position, walk, swing, lunge, squash
     const g = z.mesh.g;
