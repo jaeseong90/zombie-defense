@@ -43,15 +43,15 @@ const PICKUP = {
 
 const WAVES = [
   { walker: 5,  runner: 0, spitter: 0, bomber: 0, brute: 0, desc: 'PREPARE FOR ASSAULT' },
-  { walker: 7,  runner: 3, spitter: 0, bomber: 0, brute: 0, desc: 'RUNNERS INCOMING' },
-  { walker: 6,  runner: 4, spitter: 2, bomber: 0, brute: 0, desc: 'SPITTERS DETECTED' },
-  { walker: 5,  runner: 3, spitter: 2, bomber: 0, brute: 2, desc: 'BRUTE WARNING',  boss: true },
-  { walker: 7,  runner: 5, spitter: 2, bomber: 2, brute: 0, desc: 'BOMBERS RUSHING' },
-  { walker: 6,  runner: 7, spitter: 3, bomber: 3, brute: 0, desc: 'WATCH YOUR FLANKS' },
-  { walker: 6,  runner: 5, spitter: 3, bomber: 2, brute: 3, desc: 'BRUTE PACK',     boss: true },
-  { walker: 8,  runner: 8, spitter: 4, bomber: 4, brute: 0, desc: 'CHAOS UNLEASHED' },
-  { walker: 10, runner: 8, spitter: 5, bomber: 4, brute: 1, desc: 'OVERRUN' },
-  { walker: 8,  runner: 10,spitter: 5, bomber: 5, brute: 4, desc: 'FINAL STAND',    boss: true },
+  { walker: 7,  runner: 3, spitter: 0, bomber: 0, brute: 0, desc: 'RUNNERS INCOMING', event: 'speed' },
+  { walker: 6,  runner: 4, spitter: 2, bomber: 0, brute: 0, desc: 'TOXIC FOG',         event: 'fog' },
+  { walker: 5,  runner: 3, spitter: 2, bomber: 0, brute: 2, desc: 'BRUTE WARNING',     boss: true,  event: 'brutal' },
+  { walker: 7,  runner: 5, spitter: 2, bomber: 2, brute: 0, desc: 'BOMBER RUSH',       event: 'chaos' },
+  { walker: 6,  runner: 7, spitter: 3, bomber: 3, brute: 0, desc: 'BLACKOUT',          event: 'dark' },
+  { walker: 6,  runner: 5, spitter: 3, bomber: 2, brute: 3, desc: 'BRUTE PACK',        boss: true,  event: 'brutal' },
+  { walker: 8,  runner: 8, spitter: 4, bomber: 4, brute: 0, desc: 'FRENZY',            event: 'frenzy' },
+  { walker: 10, runner: 8, spitter: 5, bomber: 4, brute: 1, desc: 'OVERRUN',           event: 'frenzy' },
+  { walker: 8,  runner: 10,spitter: 5, bomber: 5, brute: 4, desc: 'FINAL STAND',       boss: true,  event: 'final' },
 ];
 const SPAWN_INT = 0.42;
 const REST_TIME = 5.0;
@@ -701,6 +701,12 @@ function spawnZombie(type) {
     spitCD: 1 + Math.random(),
     mesh: meshInfo,
   });
+  // Brute entry: shockwave + camera shake
+  if (type === 'brute') {
+    spawnExplosion(x, 0.4, z, 4);
+    shake(0.6);
+    ensureAudio(); audio.boom?.();
+  }
 }
 
 function nearestPlayer(x, z) {
@@ -895,8 +901,8 @@ function killZombie(z, ownerIdx) {
   }
   pendingEvents.push({ t: 'kill', x: z.x, z: z.z, s: earned, cb: p ? p.combo : 1 });
   ensureAudio(); audio.kill?.();
-  // Drop pickup chance
-  if (Math.random() < PICKUP_DROP * (z.type === 'brute' ? 4 : 1)) {
+  // Drop pickup chance (modified by wave event)
+  if (Math.random() < PICKUP_DROP * (G.dropMult || 1) * (z.type === 'brute' ? 4 : 1)) {
     const types = ['hp', 'dmg', 'rapid', 'shotgun', 'shield'];
     const pickupT = types[Math.floor(Math.random() * types.length)];
     spawnPickup(z.x, z.z, pickupT);
@@ -1070,8 +1076,8 @@ function updateZombies(dt) {
       if (d > spec.atkR * 0.6) {
         // Approach within range
         const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
-        z.x += nx * spec.spd * dt;
-        z.z += nz * spec.spd * dt;
+        z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
+        z.z += nz * spec.spd * (G.zSpdMult || 1) * dt;
         z.walkPhase += dt * spec.spd * 2;
       }
       z.spitCD -= dt;
@@ -1098,8 +1104,8 @@ function updateZombies(dt) {
       // Bomber: chase and explode on contact
       if (d > spec.atkR) {
         const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
-        z.x += nx * spec.spd * dt;
-        z.z += nz * spec.spd * dt;
+        z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
+        z.z += nz * spec.spd * (G.zSpdMult || 1) * dt;
         z.walkPhase += dt * spec.spd * 2;
       } else {
         // Trigger explosion
@@ -1110,8 +1116,8 @@ function updateZombies(dt) {
       // Melee zombie
       if (d > spec.atkR) {
         const nx = dxT / Math.max(d, 0.001), nz = dzT / Math.max(d, 0.001);
-        z.x += nx * spec.spd * dt;
-        z.z += nz * spec.spd * dt;
+        z.x += nx * spec.spd * (G.zSpdMult || 1) * dt;
+        z.z += nz * spec.spd * (G.zSpdMult || 1) * dt;
         z.walkPhase += dt * spec.spd * 2;
       } else {
         z.attackCD -= dt;
@@ -1440,6 +1446,22 @@ function startWave(idx) {
   for (const p of G.players) {
     if (p.startShield) p.shieldT = Math.max(p.shieldT || 0, p.startShield);
   }
+  // Apply wave event modifiers
+  G.event = w.event || null;
+  G.zSpdMult = 1; G.spawnIntMult = 1; G.dropMult = 1;
+  scene.fog.density = 0.018;
+  scene.fog.color.setHex(0x140820);
+  keyLight.intensity = 1.35;
+  rimLight.intensity = 0.55;
+  scene.background.setHex(0x0a0510);
+  if (G.event === 'speed')   { G.zSpdMult = 1.2; }
+  if (G.event === 'fog')     { scene.fog.density = 0.045; scene.fog.color.setHex(0x1a3320); scene.background.setHex(0x102018); }
+  if (G.event === 'dark')    { keyLight.intensity = 0.55; rimLight.intensity = 0.25; scene.background.setHex(0x050308); }
+  if (G.event === 'frenzy')  { G.spawnIntMult = 0.55; G.zSpdMult = 1.12; }
+  if (G.event === 'chaos')   { G.dropMult = 2.2; }
+  if (G.event === 'brutal')  { /* boss intro handled at first brute spawn */ }
+  if (G.event === 'final')   { G.spawnIntMult = 0.55; G.zSpdMult = 1.08; scene.fog.density = 0.03; scene.background.setHex(0x18040a); keyLight.color.setHex(0xff8060); }
+  else { keyLight.color.setHex(0xfff0d6); }
   showWaveIntro(w, G.wave);
   if (G.wave === WAVES.length) waveBoxEl.classList.add('boss');
   else waveBoxEl.classList.toggle('boss', !!w.boss);
@@ -1450,10 +1472,11 @@ function startWave(idx) {
 function updateWave(dt) {
   if (G.phase !== 'play') return;
   G.waveT += dt;
-  // Spawn pacing
+  // Spawn pacing (event modifier)
+  const spawnInt = SPAWN_INT * (G.spawnIntMult || 1);
   G.spawnAccum += dt;
-  while (G.spawnAccum > SPAWN_INT && G.toSpawnList.length) {
-    G.spawnAccum -= SPAWN_INT;
+  while (G.spawnAccum > spawnInt && G.toSpawnList.length) {
+    G.spawnAccum -= spawnInt;
     spawnZombie(G.toSpawnList.shift());
   }
   // Check wave complete
