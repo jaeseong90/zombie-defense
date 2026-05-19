@@ -892,7 +892,27 @@ function updatePlayers(dt) {
 
     // Aim from aim joystick, fallback to movement direction
     if (inp.aimLen > 0.18) {
-      p.a = Math.atan2(inp.aimX, -inp.aimY);
+      let targetA = Math.atan2(inp.aimX, -inp.aimY);
+      // Soft aim-assist: pull toward nearest enemy within a small cone
+      let bestZ = null, bestDA = 0.28, bestZA = 0;
+      for (const z of G.zombies) {
+        if (!z.alive) continue;
+        const dx = z.x - p.x, dz = z.z - p.z;
+        const dd = Math.hypot(dx, dz);
+        if (dd > 16) continue;
+        const zA = Math.atan2(dx, -dz);
+        let da = zA - targetA;
+        while (da >  Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) < bestDA) { bestDA = Math.abs(da); bestZ = z; bestZA = zA; }
+      }
+      if (bestZ) {
+        let da = bestZA - targetA;
+        while (da >  Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        targetA += da * 0.55;
+      }
+      p.a = targetA;
     } else {
       const mvl = Math.hypot(inp.mvX, inp.mvY);
       if (mvl > 0.1) p.a = Math.atan2(inp.mvX, -inp.mvY);
@@ -959,16 +979,60 @@ function firePlayerWeapon(p) {
   superDirty = true;
 }
 
-function spawnBullet(x, z, dx, dz, dmg, ownerIdx, crit, color = 0xffe27a) {
-  const m = createBulletMesh(color);
-  m.g.position.set(x, 1.0, z);
+// ─── Bullet pool (GC-free combat) ───────────────────────────
+const BULLET_POOL_N = IS_MOBILE ? 64 : 96;
+const bulletPool = [];
+for (let i = 0; i < BULLET_POOL_N; i++) {
+  const m = createBulletMesh(0xffffff);
+  m.g.visible = false;
   scene.add(m.g);
+  bulletPool.push({ mesh: m, active: false });
+}
+function _getBulletSlot() {
+  for (const b of bulletPool) if (!b.active) return b;
+  return null;
+}
+function _releaseBullet(b) {
+  if (b.poolRef) {
+    b.poolRef.active = false;
+    b.poolRef.mesh.g.visible = false;
+  } else if (b.mesh && b.mesh.g) {
+    scene.remove(b.mesh.g);
+  }
+}
+function spawnBullet(x, z, dx, dz, dmg, ownerIdx, crit, color = 0xffe27a) {
+  const slot = _getBulletSlot();
+  if (!slot) return; // pool exhausted — drop the shot
+  slot.active = true;
+  slot.mesh.core.material.color.setHex(color);
+  slot.mesh.trail.material.color.setHex(color);
+  slot.mesh.g.position.set(x, 1.0, z);
+  slot.mesh.g.visible = true;
   G.bullets.push({
+    poolRef: slot,
     x, y: 1.0, z,
     vx: dx * BULLET_SPEED, vy: 0, vz: dz * BULLET_SPEED,
     life: BULLET_LIFE,
     dmg, ownerIdx, crit,
-    mesh: m,
+    mesh: slot.mesh,
+  });
+}
+function spawnProjectile(x, z, dx, dz, speed, dmg, color, hostile, life) {
+  const slot = _getBulletSlot();
+  if (!slot) return;
+  slot.active = true;
+  slot.mesh.core.material.color.setHex(color);
+  slot.mesh.trail.material.color.setHex(color);
+  slot.mesh.g.position.set(x, 1.3, z);
+  slot.mesh.g.visible = true;
+  G.bullets.push({
+    poolRef: slot,
+    x, y: 1.3, z,
+    vx: dx * speed, vy: 0, vz: dz * speed,
+    life: life || 2.0,
+    dmg, ownerIdx: hostile ? -1 : 0, crit: false,
+    mesh: slot.mesh,
+    hostile,
   });
 }
 
@@ -980,7 +1044,7 @@ function updateBullets(dt) {
     b.mesh.g.position.set(b.x, b.y, b.z);
     // Out of arena or expired
     if (b.life <= 0 || Math.abs(b.x) > ARENA + 0.5 || Math.abs(b.z) > ARENA + 0.5) {
-      scene.remove(b.mesh.g);
+      _releaseBullet(b);
       G.bullets.splice(i, 1);
       continue;
     }
@@ -992,7 +1056,7 @@ function updateBullets(dt) {
     }
     if (blocked) {
       spawnHitParticles(b.x, b.y, b.z, 0xffd070, 6);
-      scene.remove(b.mesh.g);
+      _releaseBullet(b);
       G.bullets.splice(i, 1);
       continue;
     }
@@ -1245,21 +1309,8 @@ function updateZombies(dt) {
       z.spitCD -= dt;
       if (z.spitCD <= 0 && d < spec.atkR) {
         z.spitCD = spec.atkInt + Math.random() * 0.5;
-        // Spit projectile (spitter ball — separate from bullets)
         const sx = dxT / Math.max(d, 0.001), sz = dzT / Math.max(d, 0.001);
-        const m = createBulletMesh(0xc0ff60);
-        m.g.position.set(z.x, 1.3, z.z);
-        scene.add(m.g);
-        G.bullets.push({
-          x: z.x, y: 1.3, z: z.z,
-          vx: sx * spec.projSpd, vy: 0, vz: sz * spec.projSpd,
-          life: 2.0,
-          dmg: spec.projDmg,
-          ownerIdx: -1, // hostile
-          crit: false,
-          mesh: m,
-          hostile: true,
-        });
+        spawnProjectile(z.x, z.z, sx, sz, spec.projSpd, spec.projDmg, 0xc0ff60, true, 2.0);
         z.lungeT = 0.8;
       }
     } else if (spec.explodes) {
@@ -2137,17 +2188,23 @@ function applyNetState(m) {
 function applyEvent(e) {
   if (!e) return;
   if (e.t === 'shot') {
-    // Spawn visual-only bullet on peer
-    const m = createBulletMesh(e.c || 0xffe27a);
-    m.g.position.set(e.x, 1.0, e.z);
-    scene.add(m.g);
-    G.bullets.push({
-      x: e.x, y: 1.0, z: e.z,
-      vx: e.dx * BULLET_SPEED, vy: 0, vz: e.dz * BULLET_SPEED,
-      life: BULLET_LIFE,
-      dmg: 0, ownerIdx: e.o, crit: false,
-      mesh: m, visualOnly: true,
-    });
+    // Spawn visual-only bullet on peer (via pool)
+    const slot = _getBulletSlot();
+    if (slot) {
+      slot.active = true;
+      slot.mesh.core.material.color.setHex(e.c || 0xffe27a);
+      slot.mesh.trail.material.color.setHex(e.c || 0xffe27a);
+      slot.mesh.g.position.set(e.x, 1.0, e.z);
+      slot.mesh.g.visible = true;
+      G.bullets.push({
+        poolRef: slot,
+        x: e.x, y: 1.0, z: e.z,
+        vx: e.dx * BULLET_SPEED, vy: 0, vz: e.dz * BULLET_SPEED,
+        life: BULLET_LIFE,
+        dmg: 0, ownerIdx: e.o, crit: false,
+        mesh: slot.mesh, visualOnly: true,
+      });
+    }
     if (e.o >= 0 && G.players[e.o]) G.players[e.o].mesh.muzzleFlashT = 0.08;
     audio?.shot?.();
   } else if (e.t === 'hit') {
